@@ -1,7 +1,7 @@
 [![PyPI version](https://badge.fury.io/py/atomistic.svg)](https://badge.fury.io/py/atomistic)
 
-# atomistic
-<Short description>
+# [WIP] atomistic
+Build atomistic structures such as grain boundaries with Python.
 
 ## Installation
 

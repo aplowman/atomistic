@@ -42,7 +42,8 @@ package_data = [
 setup(
     name=package_name,
     version=get_version(),
-    description=('<Short description>'),
+    description=('Build atomistic structures such as grain boundaries with '
+                 'Python'),
     long_description=get_long_description(),
     long_description_content_type='text/markdown',
     author='Adam J. Plowman',
