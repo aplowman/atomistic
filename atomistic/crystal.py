@@ -208,7 +208,7 @@ class CrystalStructure(object):
 
         if not isinstance(lattice, BravaisLattice):
             kwargs = {
-                k: v for k, v in lattice
+                k: v for k, v in lattice.items()
                 if k not in 'lattice_parameters'
             }
             kwargs.update(lattice['lattice_parameters'])
