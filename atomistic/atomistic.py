@@ -158,7 +158,7 @@ class AtomisticStructure(object):
         self.supercell = supercell
         self.meta = {}
 
-        self.crystal_structures = self._init_crystal_structures(
+        self.crystal_structures = AtomisticStructure.init_crystal_structures(
             crystal_structures)
 
         self.lattice_sites = lattice_sites
@@ -178,7 +178,8 @@ class AtomisticStructure(object):
         if tile:
             self.tile_supercell(tile)
 
-    def _init_crystal_structures(self, crystal_structures):
+    @staticmethod
+    def init_crystal_structures(crystal_structures):
         """Instantiate crystal structures if parametrisations are passed
         instead of CrystalStructure objects themselves.
 

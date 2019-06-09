@@ -479,7 +479,7 @@ def bicrystal_from_csl_vectors(crystal_structure, csl_vecs, box_csl=None,
     """
     Parameters
     ----------
-    crystal_structure : CrystalStructure
+    crystal_structure : dict or CrystalStructure
     csl_vecs : list of length 2 of ndarray of shape (3, 3)
         List of two arrays of three column vectors representing CSL vectors
         in the lattice basis. The two CSL unit cells defined here rotate onto
@@ -547,6 +547,11 @@ def bicrystal_from_csl_vectors(crystal_structure, csl_vecs, box_csl=None,
         to lattice sites, and crystal boxes as well.
 
     """
+
+    # Generate CrystalStructure if necessary:
+    crystal_structure = AtomisticStructure.init_crystal_structures([
+        crystal_structure
+    ])[0]
 
     if np.all(csl_vecs[0][:, 2] != csl_vecs[1][:, 2]):
         raise ValueError('Third vectors in `csl_vecs[0]` and csl_vecs[1] '
