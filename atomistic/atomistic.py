@@ -198,7 +198,7 @@ class AtomisticStructure(object):
         cs_objects = []
         for i in crystal_structures:
             if not isinstance(i, CrystalStructure):
-                i = CrystalStructure()
+                i = CrystalStructure(**i)
 
             cs_objects.append(i)
 
