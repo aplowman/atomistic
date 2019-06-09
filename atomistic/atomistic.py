@@ -10,6 +10,7 @@ from vecmaths import rotation, geometry
 
 from atomistic.visualise import visualise_structure
 from atomistic.utils import get_column_vector
+from atomistic.crystal import CrystalStructure
 
 
 def get_box_centre(box, origin=None):
@@ -157,12 +158,14 @@ class AtomisticStructure(object):
         self.supercell = supercell
         self.meta = {}
 
+        self.crystal_structures = self._init_crystal_structures(
+            crystal_structures)
+
         self.lattice_sites = lattice_sites
         self.lattice_labels = lattice_labels
         self.interstice_sites = interstice_sites
         self.interstice_labels = interstice_labels
         self.crystals = crystals
-        self.crystal_structures = crystal_structures
         self._overlap_tol = overlap_tol
 
         self.check_overlapping_atoms(overlap_tol)
@@ -174,6 +177,32 @@ class AtomisticStructure(object):
 
         if tile:
             self.tile_supercell(tile)
+
+    def _init_crystal_structures(self, crystal_structures):
+        """Instantiate crystal structures if parametrisations are passed
+        instead of CrystalStructure objects themselves.
+
+        Parameters
+        ----------
+        crystal_structures : list of (dict or CrystalStructure)
+            If a dict, must have keys:
+                lattice : dict or BravaisLattice
+                motif : dict
+
+        Returns
+        -------
+        cs_objects : list of CrystalStructure
+
+        """
+
+        cs_objects = []
+        for i in crystal_structures:
+            if not isinstance(i, CrystalStructure):
+                i = CrystalStructure()
+
+            cs_objects.append(i)
+
+        return cs_objects
 
     def translate(self, shift):
         """
