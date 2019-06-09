@@ -93,7 +93,7 @@ class CrystalStructure(object):
 
     Attributes
     ----------
-    bravais_lattice: BravaisLattice
+    lattice: BravaisLattice
     motif: dict
     lat_sites_std : ndarray of shape (3, N)
     lat_sites_frac : ndarray of shape (3, N)
@@ -104,12 +104,12 @@ class CrystalStructure(object):
 
     """
 
-    def __init__(self, bravais_lattice=None, motif=None):
+    def __init__(self, lattice=None, motif=None):
         """Instantiate a CrystalStructure object.
 
         Parameters
         ----------
-        bravais_lattice : BravaisLattice or dict
+        lattice : BravaisLattice or dict
             If a dict, a BravaisLattice object is created, using the following
             keys:
                 lattice_system : str
@@ -133,15 +133,15 @@ class CrystalStructure(object):
 
         """
 
-        self.bravais_lattice = self._validate_lattice(bravais_lattice)
+        self.lattice = self._validate_lattice(lattice)
         self._validate_motif(motif)
 
         # Set some attributes directly from BravaisLattice:
-        lat_sites_frac = bravais_lattice.lattice_sites_frac
+        lat_sites_frac = lattice.lattice_sites_frac
         num_lat_sites = lat_sites_frac.shape[1]
 
         self.motif = copy.deepcopy(motif)
-        self.lattice_sites = bravais_lattice.lattice_sites
+        self.lattice_sites = lattice.lattice_sites
         self.lattice_sites_frac = lat_sites_frac
 
         # Set labels for lattice sites:
@@ -151,7 +151,7 @@ class CrystalStructure(object):
         motif_rs = motif['atoms']['sites'].T.reshape((-1, 3, 1))
 
         atom_sites_frac = np.concatenate(lat_sites_frac + motif_rs, axis=1)
-        atom_sites_std = np.dot(bravais_lattice.unit_cell, atom_sites_frac)
+        atom_sites_std = np.dot(lattice.unit_cell, atom_sites_frac)
         self.atom_sites = atom_sites_std
 
         # Set labels for atom sites:
@@ -195,26 +195,26 @@ class CrystalStructure(object):
                     lab_name: (np.array(valsidx[0]), np.array(valsidx[1]))
                 })
             interstice_sites_frac = int_sites
-            interstice_sites = np.dot(bravais_lattice.unit_cell, int_sites)
+            interstice_sites = np.dot(lattice.unit_cell, int_sites)
             interstice_labels = int_sites_labs
 
         self.interstice_sites = interstice_sites
         self.interstice_sites_frac = interstice_sites_frac
         self.interstice_labels = interstice_labels
 
-    def _validate_lattice(self, bravais_lattice):
+    def _validate_lattice(self, lattice):
         """Generate a BravaisLattice object if only a parametrisation is
         passed."""
 
-        if not isinstance(bravais_lattice, BravaisLattice):
+        if not isinstance(lattice, BravaisLattice):
             kwargs = {
-                k: v for k, v in bravais_lattice
+                k: v for k, v in lattice
                 if k not in 'lattice_parameters'
             }
-            kwargs.update(bravais_lattice['lattice_parameters'])
-            bravais_lattice = BravaisLattice(**kwargs)
+            kwargs.update(lattice['lattice_parameters'])
+            lattice = BravaisLattice(**kwargs)
 
-        return bravais_lattice
+        return lattice
 
     def _validate_motif(self, motif):
         """Validate the motif dict."""
@@ -265,7 +265,7 @@ class CrystalStructure(object):
 
     @property
     def atom_sites_frac(self):
-        return np.dot(np.linalg.inv(self.bravais_lattice.unit_cell), self.atom_sites)
+        return np.dot(np.linalg.inv(self.lattice.unit_cell), self.atom_sites)
 
     @property
     def species(self):
@@ -285,7 +285,7 @@ class CrystalStructure(object):
     def __repr__(self):
 
         return ('CrystalStructure(\n'
-                '\t' + self.bravais_lattice.__repr__() + '\n'
+                '\t' + self.lattice.__repr__() + '\n'
                 '\t' + '{!r}'.format(self.motif) + '\n'
                 ')')
 
@@ -320,15 +320,15 @@ class CrystalStructure(object):
                '\nLattice sites (Cartesian) = \n{!s}\n'
                '\nAtoms (fractional coordinates of '
                'unit cell) = \n{!s}\n').format(
-            self.bravais_lattice.lattice_system,
-            self.bravais_lattice.centring_type,
+            self.lattice.lattice_system,
+            self.lattice.centring_type,
             self.motif['atoms']['sites'].shape[1],
-            self.bravais_lattice.a, self.bravais_lattice.b,
-            self.bravais_lattice.c, self.bravais_lattice.α,
-            self.bravais_lattice.β, self.bravais_lattice.γ,
-            self.bravais_lattice.unit_cell,
-            self.bravais_lattice.lattice_sites_frac,
-            self.bravais_lattice.lattice_sites,
+            self.lattice.a, self.lattice.b,
+            self.lattice.c, self.lattice.α,
+            self.lattice.β, self.lattice.γ,
+            self.lattice.unit_cell,
+            self.lattice.lattice_sites_frac,
+            self.lattice.lattice_sites,
             atoms_str)
 
         return ret
@@ -579,7 +579,7 @@ class CrystalBox(Crystal):
 
         # Convenience:
         cs = crystal_structure
-        lat_vecs = cs.bravais_lattice.unit_cell
+        lat_vecs = cs.lattice.unit_cell
 
         # Get the bounding box of box_vecs whose vectors are parallel to the
         # crystal lattice. Use padding to catch edge atoms which aren't on

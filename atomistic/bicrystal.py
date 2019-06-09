@@ -573,7 +573,7 @@ def bicrystal_from_csl_vectors(crystal_structure, csl_vecs, box_csl=None,
 
         box_csl = CSL_FROM_PARAMS_GB_TYPES.get(gb_type) * gb_size
 
-    lat_vecs = crystal_structure.bravais_lattice.unit_cell
+    lat_vecs = crystal_structure.lattice.unit_cell
     rot_ax_std = np.dot(lat_vecs, csl_vecs[0][:, 2:3])
     csl_vecs_std = [np.dot(lat_vecs, c) for c in csl_vecs]
 

@@ -259,10 +259,10 @@ def visualise_structure(structure, show_iplot=False, save=False, save_args=None,
 
     boxes = []
 
-    if hasattr(structure, 'bravais_lattice'):
+    if hasattr(structure, 'lattice'):
         # CrystalStructure
         boxes.append({
-            'edges': structure.bravais_lattice.vecs,
+            'edges': structure.lattice.vecs,
             'name': 'Unit cell',
             'colour': 'navy'
         })
