@@ -104,7 +104,7 @@ class CrystalStructure(object):
 
     """
 
-    def __init__(self, lattice=None, motif=None):
+    def __init__(self, lattice, motif):
         """Instantiate a CrystalStructure object.
 
         Parameters
