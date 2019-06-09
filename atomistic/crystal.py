@@ -91,30 +91,6 @@ def get_bounding_box(box, bound_vecs=None, padding=0):
 class CrystalStructure(object):
     """Class to represent a crystal structure with a lattice and atomic motif.
 
-    Parameters
-    ----------
-    bravais_lattice : BravaisLattice or dict
-        If a dict, a BravaisLattice object is created, using the following
-        keys:
-            lattice_system : str
-            lattice_parameters : dict
-                dict containing lattice parameters: a, b, c, alpha/α, beta/β,
-                gamma/α.
-            centring_type : str, optional
-
-    motif : dict
-        Dict representing the atomic motif of the crystal structure. The
-        following keys must exist:
-            atom_sites : ndarray of shape (3, N)
-                Array of column vectors representing positions of the atoms
-                associated with each lattice site. Given in fractional
-                coordinates of the lattice unit cell.
-            species : ndarray or list of length P of str
-                Species names associated with each atom site.
-            species_idx : ndarray or list of length N of int
-                Array which maps each atom site to a chemical symbol in
-                `species`.
-
     Attributes
     ----------
     bravais_lattice: BravaisLattice
@@ -129,10 +105,31 @@ class CrystalStructure(object):
     """
 
     def __init__(self, bravais_lattice=None, motif=None):
-        """
-        Instantiate a CrystalStructure object. Use parameters `bravais_lattice`
-        and `motif` if generating a new CrystalStructure, or parameter `state`
-        if loading from a saved state.
+        """Instantiate a CrystalStructure object.
+
+        Parameters
+        ----------
+        bravais_lattice : BravaisLattice or dict
+            If a dict, a BravaisLattice object is created, using the following
+            keys:
+                lattice_system : str
+                lattice_parameters : dict
+                    dict containing lattice parameters: a, b, c, alpha/α,
+                    beta/β, gamma/α.
+                centring_type : str, optional
+
+        motif : dict
+            Dict representing the atomic motif of the crystal structure. The
+            following keys must exist:
+                atom_sites : ndarray of shape (3, N)
+                    Array of column vectors representing positions of the atoms
+                    associated with each lattice site. Given in fractional
+                    coordinates of the lattice unit cell.
+                species : ndarray or list of length P of str
+                    Species names associated with each atom site.
+                species_idx : ndarray or list of length N of int
+                    Array which maps each atom site to a chemical symbol in
+                    `species`.        
 
         """
 
