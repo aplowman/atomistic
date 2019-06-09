@@ -133,7 +133,7 @@ class CrystalStructure(object):
 
         """
 
-        self.lattice = self._validate_lattice(lattice)
+        self.lattice = self._init_lattice(lattice)
         self._validate_motif(motif)
 
         # Set some attributes directly from BravaisLattice:
@@ -202,7 +202,7 @@ class CrystalStructure(object):
         self.interstice_sites_frac = interstice_sites_frac
         self.interstice_labels = interstice_labels
 
-    def _validate_lattice(self, lattice):
+    def _init_lattice(self, lattice):
         """Generate a BravaisLattice object if only a parametrisation is
         passed."""
 
