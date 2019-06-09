@@ -6,6 +6,7 @@ import numpy as np
 from beautifultable import BeautifulTable
 from vecmaths.geometry import get_box_corners
 from vecmaths.utils import snap_arr
+from bravais import BravaisLattice
 
 from atomistic.utils import get_column_vector, check_indices
 from atomistic.visualise import visualise_structure
@@ -92,16 +93,27 @@ class CrystalStructure(object):
 
     Parameters
     ----------
-    bravais_lattice : BravaisLattice
-    motif : dict with the following keys:
-        atom_sites : ndarray of shape (3, N)
-            Array of column vectors representing positions of the atoms
-            associated with each lattice site. Given in fractional coordinates
-            of the lattice unit cell.
-        species : ndarray or list of length P of str
-            Species names associated with each atom site.
-        species_idx : ndarray or list of length N of int
-            Array which maps each atom site to a chemical symbol in `species`.
+    bravais_lattice : BravaisLattice or dict
+        If a dict, a BravaisLattice object is created, using the following
+        keys:
+            lattice_system : str
+            lattice_parameters : dict
+                dict containing lattice parameters: a, b, c, alpha/α, beta/β,
+                gamma/α.
+            centring_type : str, optional
+
+    motif : dict
+        Dict representing the atomic motif of the crystal structure. The
+        following keys must exist:
+            atom_sites : ndarray of shape (3, N)
+                Array of column vectors representing positions of the atoms
+                associated with each lattice site. Given in fractional
+                coordinates of the lattice unit cell.
+            species : ndarray or list of length P of str
+                Species names associated with each atom site.
+            species_idx : ndarray or list of length N of int
+                Array which maps each atom site to a chemical symbol in
+                `species`.
 
     Attributes
     ----------
@@ -124,12 +136,13 @@ class CrystalStructure(object):
 
         """
 
+        self.bravais_lattice = self._validate_lattice(bravais_lattice)
         self._validate_motif(motif)
 
         # Set some attributes directly from BravaisLattice:
         lat_sites_frac = bravais_lattice.lattice_sites_frac
         num_lat_sites = lat_sites_frac.shape[1]
-        self.bravais_lattice = copy.deepcopy(bravais_lattice)
+
         self.motif = copy.deepcopy(motif)
         self.lattice_sites = bravais_lattice.lattice_sites
         self.lattice_sites_frac = lat_sites_frac
@@ -191,6 +204,20 @@ class CrystalStructure(object):
         self.interstice_sites = interstice_sites
         self.interstice_sites_frac = interstice_sites_frac
         self.interstice_labels = interstice_labels
+
+    def _validate_lattice(self, bravais_lattice):
+        """Generate a BravaisLattice object if only a parametrisation is
+        passed."""
+
+        if not isinstance(bravais_lattice, BravaisLattice):
+            kwargs = {
+                k: v for k, v in bravais_lattice
+                if k not in 'lattice_parameters'
+            }
+            kwargs.update(bravais_lattice['lattice_parameters'])
+            bravais_lattice = BravaisLattice(**kwargs)
+
+        return bravais_lattice
 
     def _validate_motif(self, motif):
         """Validate the motif dict."""
