@@ -7,9 +7,12 @@ from beautifultable import BeautifulTable
 from vecmaths.geometry import get_box_corners
 from vecmaths.utils import snap_arr
 from bravais import BravaisLattice
+from spatial_sites import Sites
 
 from atomistic.utils import get_column_vector, check_indices
 from atomistic.visualise import visualise_structure
+
+REPR_INDENT = 4
 
 
 def get_bounding_box(box, bound_vecs=None, padding=0):
@@ -118,7 +121,8 @@ class CrystalStructure(object):
                     beta/β, gamma/α.
                 centring_type : str, optional
 
-        motif : dict
+        motif : dict or AtomicMotif
+            TODO: redo
             Dict representing the atomic motif of the crystal structure. The
             following keys must exist:
                 atom_sites : ndarray of shape (3, N)
@@ -129,78 +133,23 @@ class CrystalStructure(object):
                     Species names associated with each atom site.
                 species_idx : ndarray or list of length N of int
                     Array which maps each atom site to a chemical symbol in
-                    `species`.        
+                    `species`.
 
         """
 
-        self.lattice = self._init_lattice(lattice)
-        self._validate_motif(motif)
+        self._lattice = self._init_lattice(lattice)
+        self._motif = self._init_motif(motif)
+        self._sites = self._init_sites()
 
-        # Set some attributes directly from BravaisLattice:
-        lat_sites_frac = lattice.lattice_sites_frac
-        num_lat_sites = lat_sites_frac.shape[1]
+    def __setattr__(self, name, value):
+        'Overridden method to prevent reassigning sites attributes.'
 
-        self.motif = copy.deepcopy(motif)
-        self.lattice_sites = lattice.lattice_sites
-        self.lattice_sites_frac = lat_sites_frac
+        if getattr(self, '_sites', None) and name in self._sites:
+            msg = 'Cannot set attribute "{}"'.format(name)
+            raise AttributeError(msg)
 
-        # Set labels for lattice sites:
-        self.lattice_labels = {}
-
-        # Set atom sites: add atomic motif to each lattice site to get
-        motif_rs = motif['atoms']['sites'].T.reshape((-1, 3, 1))
-
-        atom_sites_frac = np.concatenate(lat_sites_frac + motif_rs, axis=1)
-        atom_sites_std = np.dot(lattice.unit_cell, atom_sites_frac)
-        self.atom_sites = atom_sites_std
-
-        # Set labels for atom sites:
-        mt_atm_labs = copy.deepcopy(motif['atoms']['labels'])
-        self.atom_labels = {}
-        for lab_name, valsidx in mt_atm_labs.items():
-
-            lab_vals = np.array(valsidx[0])
-            lab_idx = np.array(valsidx[1])
-            lab_idx_rp = np.repeat(lab_idx, num_lat_sites)
-            self.atom_labels.update({lab_name: (lab_vals, lab_idx_rp)})
-
-        # Generate a special atom label which tells us, for motifs with more
-        # than one atom of the same species, which within-species motif atom
-        # number a given atom maps to:
-
-        motif_species = np.array(mt_atm_labs['species'][0])
-        motif_species_idx = np.array(mt_atm_labs['species'][1])
-        species_count = np.ones(len(motif_species_idx)) * np.nan
-        for i in range(len(motif_species)):
-            where_sp_idx = np.where(motif_species_idx == i)[0]
-            species_count[where_sp_idx] = np.arange(len(where_sp_idx))
-
-        species_count = species_count.astype(int)
-        species_count = np.tile(species_count.astype(int), num_lat_sites)
-
-        self.atom_labels.update({
-            'species_count': (species_count, np.arange(len(species_count)))
-        })
-
-        # Set interstice sites:
-        interstice_sites = None
-        interstice_sites_frac = None
-        interstice_labels = None
-
-        if motif.get('interstices') is not None:
-            int_sites = copy.deepcopy(motif['interstices']['sites'])
-            int_sites_labs = {}
-            for lab_name, valsidx in motif['interstices']['labels'].items():
-                int_sites_labs.update({
-                    lab_name: (np.array(valsidx[0]), np.array(valsidx[1]))
-                })
-            interstice_sites_frac = int_sites
-            interstice_sites = np.dot(lattice.unit_cell, int_sites)
-            interstice_labels = int_sites_labs
-
-        self.interstice_sites = interstice_sites
-        self.interstice_sites_frac = interstice_sites_frac
-        self.interstice_labels = interstice_labels
+        # Set all other attributes as normal:
+        super().__setattr__(name, value)
 
     def _init_lattice(self, lattice):
         """Generate a BravaisLattice object if only a parametrisation is
@@ -216,68 +165,69 @@ class CrystalStructure(object):
 
         return lattice
 
-    def _validate_motif(self, motif):
-        """Validate the motif dict."""
+    def _init_motif(self, motif):
+        """Generate an AtomicMotif object if only a parametrisation is
+        passed."""
 
-        allowed_sites_label_keys = {
-            'atoms': ['species', 'bulk_coord_num'],
-            'interstices': ['bulk_name']
+        if not isinstance(motif, AtomicMotif):
+            motif = AtomicMotif(**motif)
+
+        return motif
+
+    def _init_sites(self):
+        'Tile Sites (atoms, interstices) in the atomic motif'
+
+        repeat_labels = {
+            'atoms': {
+                'species': 'species_order',
+            }
         }
 
-        req_sites_keys = ['labels', 'sites']
-        mtf_fail_msg = 'Motif failed validation: '
+        sites_dict = {}
+        for site_name, site_obj in self.motif.sites.items():
 
-        for k, v in motif.items():
-            if k not in allowed_sites_label_keys.keys():
-                raise ValueError(
-                    mtf_fail_msg +
-                    '"{}" is not an allowed sites name.'.format(k)
-                )
+            rep_lab = repeat_labels.get(site_name, {})
+            tiled_sites = self.lattice_sites.tile(site_obj, rep_lab)
 
-            found_sites_keys = list(sorted(v.keys()))
-            if found_sites_keys != req_sites_keys:
-                raise ValueError(
-                    mtf_fail_msg +
-                    'required sites keys are {}, but found keys: {}'.format(
-                        req_sites_keys, found_sites_keys)
-                )
+            setattr(self, site_name, tiled_sites)
+            sites_dict.update({
+                site_name: tiled_sites
+            })
 
-            for lab_key, lab_val in v['labels'].items():
-
-                lab_val_fail_msg = (mtf_fail_msg + 'each sites label key must '
-                                    'be a tuple of length two, but found label'
-                                    ' value: {}'.format(lab_val))
-
-                if not isinstance(lab_val, tuple):
-                    raise ValueError(lab_val_fail_msg)
-
-                if len(lab_val) != 2:
-                    raise ValueError(lab_val_fail_msg)
-
-                if lab_key not in allowed_sites_label_keys[k]:
-                    raise ValueError(
-                        '"{}" is not an allowed label name for {}.'.format(
-                            lab_key, k
-                        )
-                    )
-
-                check_indices(lab_val[0], lab_val[1])
+        return sites_dict
 
     @property
-    def atom_sites_frac(self):
-        return np.dot(np.linalg.inv(self.lattice.unit_cell), self.atom_sites)
+    def lattice(self):
+        return self._lattice
 
     @property
-    def species(self):
-        return self.atom_labels['species'][0]
+    def motif(self):
+        return self._motif
 
     @property
-    def species_idx(self):
-        return self.atom_labels['species'][1]
+    def sites(self):
+        return self._sites
 
     @property
-    def all_species(self):
-        return self.species[self.species_idx]
+    def lattice_sites(self):
+        """Alias to the BravaisLattice lattice_sites Sites object."""
+        return self.lattice.lattice_sites
+
+    # @property
+    # def atom_sites_frac(self):
+    #     return np.dot(np.linalg.inv(self.lattice.unit_cell), self.atom_sites)
+
+    # @property
+    # def species(self):
+    #     return self.atom_labels['species'][0]
+
+    # @property
+    # def species_idx(self):
+    #     return self.atom_labels['species'][1]
+
+    # @property
+    # def all_species(self):
+    #     return self.species[self.species_idx]
 
     def visualise(self, **kwargs):
         visualise_structure(self, **kwargs)
@@ -373,7 +323,7 @@ class Crystal(object):
         Parameters
         ----------
         rot_mat : ndarray of shape (3, 3)
-            Rotation matrix that pre-multiplies column vectors in order to 
+            Rotation matrix that pre-multiplies column vectors in order to
             rotate them about a particular axis and angle.
 
         """
@@ -478,7 +428,7 @@ class CrystalBox(Crystal):
         Parameters
         ----------
         rot_mat : ndarray of shape (3, 3)
-            Rotation matrix that pre-multiplies column vectors in order to 
+            Rotation matrix that pre-multiplies column vectors in order to
             rotate them about a particular axis and angle.
 
         """
@@ -568,7 +518,7 @@ class CrystalBox(Crystal):
         2.  Find all sites within and on the edges/corners of that bounding
             box.
         3.  Transform sites to the box basis.
-        4.  Find valid sites, which have vector components in the interval 
+        4.  Find valid sites, which have vector components in the interval
             [0, 1] in the box basis, where the interval may be (half-)closed
             /open depending on the specified edge conditions.
 
@@ -639,3 +589,93 @@ class CrystalBox(Crystal):
 
     def visualise(self, **kwargs):
         visualise_structure(self, **kwargs)
+
+
+class AtomicMotif(object):
+    """Class to represent an atomic motif that is to be applied at each lattice
+    site of a Bravais lattice to form a crystal structure."""
+
+    def __init__(self, **sites):
+
+        req_sites = ['atoms']
+
+        self._sites = {}
+
+        for sites_name, sites_data in sites.items():
+            if sites_name in self._sites:
+                msg = ('Multiple sites with the same name were found in the '
+                       'AtomicMotif.')
+                raise ValueError(msg)
+            sites_obj = self._init_sites(sites_name, sites_data)
+            setattr(self, sites_name, sites_obj)
+            self._sites.update({
+                sites_name: sites_obj
+            })
+
+        for i in req_sites:
+            if i not in sites:
+                msg = ('Sites with name "{}" must be specified for the '
+                       'AtomicMotif')
+                raise ValueError(msg.format(i))
+
+    def __setattr__(self, name, value):
+        """Overridden method to prevent reassigning sites attributes."""
+
+        if getattr(self, '_sites', None) and name in self._sites:
+            msg = 'Cannot set attribute "{}"'.format(name)
+            raise AttributeError(msg)
+
+        # Set all other attributes as normal:
+        super().__setattr__(name, value)
+
+    def _init_sites(self, sites_name, sites_data):
+        """Instantiate Sites if parametrisations are passed instead of
+        Sites objects themselves."""
+
+        allowed_sites_labels = {
+            'atoms': ['species', 'bulk_coord_num'],
+            'interstices': ['bulk_name', 'is_occupied']
+        }
+
+        sites_obj = sites_data
+        if not isinstance(sites_obj, Sites):
+            sites_obj = Sites(coords=sites_data['coords'],
+                              labels=sites_data['labels'],
+                              cast_to_float=True)
+
+        if not sites_name in allowed_sites_labels:
+            msg = ('Site name "{}" is not a valid AtomicMotif site name. '
+                   'Valid names are: {}')
+            raise ValueError(
+                msg.format(sites_name, list(allowed_sites_labels.keys()))
+            )
+
+        for lab_name in sites_obj.labels:
+            if not lab_name in allowed_sites_labels[sites_name]:
+                msg = ('Label name "{}" is not a valid label name for '
+                       'AtomicMotif sites called "{}".')
+                raise ValueError(msg.format(lab_name, sites_name))
+
+        return sites_obj
+
+    @property
+    def sites(self):
+        return self._sites
+
+    @property
+    def atom_sites(self):
+        return self.sites['atom_sites']
+
+    def __repr__(self):
+
+        arg_fmt = ' ' * REPR_INDENT
+        out = (
+            '{0}(\n'
+            '{1}sites={2!r},\n'
+            ')'.format(
+                self.__class__.__name__,
+                arg_fmt,
+                self.sites
+            )
+        )
+        return out
