@@ -665,6 +665,16 @@ class AtomicMotif(object):
     def __repr__(self):
 
         arg_fmt = ' ' * REPR_INDENT
+
+        sites = '{\n'
+        for k, v in self.sites.items():
+            sites_name_fmt = '{!r}: '.format(k)
+            sites_vals_indent = '\n' + 2 * arg_fmt
+            sites_vals = '{!r}'.format(v).replace('\n', sites_vals_indent)
+            sites += '{}{}{},\n'.format(2 * arg_fmt,
+                                        sites_name_fmt, sites_vals)
+        sites += '{}}}'.format(arg_fmt)
+
         out = (
             '{0}(\n'
             '{1}sites={2!r},\n'
