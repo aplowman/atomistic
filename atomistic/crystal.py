@@ -8,6 +8,7 @@ from vecmaths.geometry import get_box_corners
 from vecmaths.utils import snap_arr
 from bravais import BravaisLattice
 from spatial_sites import Sites
+from spatial_sites.utils import repr_dict
 
 from atomistic.utils import get_column_vector, check_indices
 from atomistic.visualise import visualise_structure
@@ -234,54 +235,19 @@ class CrystalStructure(object):
 
     def __repr__(self):
 
-        return ('CrystalStructure(\n'
-                '\t' + self.lattice.__repr__() + '\n'
-                '\t' + '{!r}'.format(self.motif) + '\n'
-                ')')
+        arg_fmt = ' ' * REPR_INDENT
 
-    def __str__(self):
-
-        atoms_str = BeautifulTable()
-        atoms_str.numeric_precision = 4
-        atoms_str.intersection_char = ''
-        column_headers = ['Number', 'x', 'y', 'z']
-
-        for i in self.atom_labels.keys():
-            column_headers.append(i)
-
-        atoms_str.column_headers = column_headers
-        atom_sites_frac = self.atom_sites_frac
-
-        for atom_idx in range(atom_sites_frac.shape[1]):
-
-            row = [
-                atom_idx,
-                *(atom_sites_frac[:, atom_idx]),
-                *[v[0][v[1]][atom_idx] for _, v in self.atom_labels.items()]
-            ]
-            atoms_str.append_row(row)
-
-        ret = ('{!s}-{!s} Bravais lattice + {!s}-atom motif\n\n'
-               'Lattice parameters:\n'
-               'a = {!s}\nb = {!s}\nc = {!s}\n'
-               'α = {!s}°\nβ = {!s}°\nγ = {!s}°\n'
-               '\nLattice vectors = \n{!s}\n'
-               '\nLattice sites (fractional) = \n{!s}\n'
-               '\nLattice sites (Cartesian) = \n{!s}\n'
-               '\nAtoms (fractional coordinates of '
-               'unit cell) = \n{!s}\n').format(
-            self.lattice.lattice_system,
-            self.lattice.centring_type,
-            self.motif['atoms']['sites'].shape[1],
-            self.lattice.a, self.lattice.b,
-            self.lattice.c, self.lattice.α,
-            self.lattice.β, self.lattice.γ,
-            self.lattice.unit_cell,
-            self.lattice.lattice_sites_frac,
-            self.lattice.lattice_sites,
-            atoms_str)
-
-        return ret
+        lat = '{!r}'.format(self.lattice).replace('\n', '\n' + arg_fmt)
+        motif = '{!r}'.format(self.motif).replace('\n', '\n' + arg_fmt)
+        sites = repr_dict(self.sites, REPR_INDENT)
+        out = (
+            '{0}(\n'
+            '{1}lattice={2},\n'
+            '{1}motif={3},\n'
+            '{1}sites={4},\n'
+            ')'.format(self.__class__.__name__, arg_fmt, lat, motif, sites)
+        )
+        return out
 
 
 class Crystal(object):
@@ -665,23 +631,15 @@ class AtomicMotif(object):
     def __repr__(self):
 
         arg_fmt = ' ' * REPR_INDENT
-
-        sites = '{\n'
-        for k, v in self.sites.items():
-            sites_name_fmt = '{!r}: '.format(k)
-            sites_vals_indent = '\n' + 2 * arg_fmt
-            sites_vals = '{!r}'.format(v).replace('\n', sites_vals_indent)
-            sites += '{}{}{},\n'.format(2 * arg_fmt,
-                                        sites_name_fmt, sites_vals)
-        sites += '{}}}'.format(arg_fmt)
+        sites = repr_dict(self.sites, REPR_INDENT)
 
         out = (
             '{0}(\n'
-            '{1}sites={2!r},\n'
+            '{1}sites={2},\n'
             ')'.format(
                 self.__class__.__name__,
                 arg_fmt,
-                self.sites
+                sites
             )
         )
         return out
