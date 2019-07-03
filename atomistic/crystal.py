@@ -662,10 +662,6 @@ class AtomicMotif(object):
     def sites(self):
         return self._sites
 
-    @property
-    def atom_sites(self):
-        return self.sites['atom_sites']
-
     def __repr__(self):
 
         arg_fmt = ' ' * REPR_INDENT
