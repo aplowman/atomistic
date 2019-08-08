@@ -1,5 +1,6 @@
 """`atomistic.crystal.py`"""
 
+from pprint import pprint
 import copy
 
 import numpy as np
@@ -9,6 +10,7 @@ from vecmaths.utils import snap_arr
 from bravais import BravaisLattice
 from spatial_sites import Sites
 from spatial_sites.utils import repr_dict
+from gemo import GeometryGroup, Box
 
 from atomistic.utils import get_column_vector, check_indices
 from atomistic.visualise import visualise_structure
@@ -388,48 +390,6 @@ class CrystalBox(Crystal):
         self.bounding_box['bound_box'][0] = np.dot(
             rot_mat, self.bounding_box['bound_box'][0])
 
-    def _find_valid_sites(self, sites_frac, labels, unit_cell_origins, lat_vecs,
-                          box_vecs_inv, edge_conditions):
-
-        tol = 1e-14
-
-        sts_frac_rs = sites_frac.T.reshape((-1, 3, 1))
-        sts_lat = np.concatenate(unit_cell_origins + sts_frac_rs, axis=1)
-        sts_std = np.dot(lat_vecs, sts_lat)
-        sts_box = np.dot(box_vecs_inv, sts_std)
-        sts_box = snap_arr(sts_box, 0, tol)
-        sts_box = snap_arr(sts_box, 1, tol)
-
-        # Form a boolean edge condition array based on `edge_condtions`.
-        # Start by allowing all sites:
-        cnd = np.ones(sts_box.shape[1], dtype=bool)
-
-        for dir_idx, pt in enumerate(edge_conditions):
-
-            if pt[0] == '1':
-                cnd = np.logical_and(cnd, sts_box[dir_idx] >= 0)
-            elif pt[0] == '0':
-                cnd = np.logical_and(cnd, sts_box[dir_idx] > 0)
-
-            if pt[1] == '1':
-                cnd = np.logical_and(cnd, sts_box[dir_idx] <= 1)
-            elif pt[1] == '0':
-                cnd = np.logical_and(cnd, sts_box[dir_idx] < 1)
-
-        in_idx = np.where(cnd)[0]
-        sts_box_in = sts_box[:, in_idx]
-        sts_std_in = sts_std[:, in_idx]
-        sts_std_in = snap_arr(sts_std_in, 0, tol)
-
-        labels_in = {}
-        for k, v in labels.items():
-            labels_in.update({
-                k: (v[0],
-                    np.repeat(v[1], unit_cell_origins.shape[1])[in_idx])
-            })
-
-        return (sts_std_in, sts_box_in, labels_in)
-
     def __init__(self, crystal_structure=None, box_vecs=None, edge_conditions=None,
                  origin=None):
         """
@@ -476,68 +436,98 @@ class CrystalBox(Crystal):
         if edge_conditions is None:
             edge_conditions = ['10', '10', '10']
 
-        # Convenience:
-        cs = crystal_structure
-        lat_vecs = cs.lattice.unit_cell
+        # Generate CrystalStructure if necessary:
+        cs = CrystalStructure.init_crystal_structures([crystal_structure])[0]
 
-        # Get the bounding box of box_vecs whose vectors are parallel to the
-        # crystal lattice. Use padding to catch edge atoms which aren't on
-        # lattice sites.
+        # Get the bounding box of box_vecs whose vectors are parallel to the crystal
+        # lattice. Use padding to catch edge atoms which aren't on lattice sites:
         bounding_box = get_bounding_box(
-            box_vecs, bound_vecs=lat_vecs, padding=1)
-        box_vecs_inv = np.linalg.inv(box_vecs)
-
-        bb = bounding_box['bound_box'][0]
-        bb_org = bounding_box['bound_box_origin'][:, 0]
+            box_vecs,
+            bound_vecs=cs.lattice.unit_cell,
+            padding=1
+        )
         bb_bv = bounding_box['bound_box_bv'][:, 0]
         bb_org_bv = bounding_box['bound_box_origin_bv'][:, 0]
 
         # Get all lattice sites within the bounding box, as column vectors:
-        grid = [range(bb_org_bv[i], bb_org_bv[i] + bb_bv[i] + 1)
-                for i in [0, 1, 2]]
+        grid = [range(bb_org_bv[i], bb_org_bv[i] + bb_bv[i] + 1) for i in [0, 1, 2]]
         unit_cell_origins = np.vstack(np.meshgrid(*grid)).reshape((3, -1))
 
-        com_params = [
-            unit_cell_origins,
-            lat_vecs,
-            box_vecs_inv,
-            edge_conditions,
-        ]
+        origin_sites = Sites(coords=unit_cell_origins,
+                             vector_direction='col',
+                             basis=cs.atoms.basis)
 
-        (lat_std, lat_box,
-            lat_labs) = self._find_valid_sites(cs.lattice_sites_frac,
-                                               cs.lattice_labels, *com_params)
+        sites = {k: origin_sites.tile(v) for k, v in cs.sites.items()}
+        for i in sites.values():
 
-        (at_std, at_box,
-            at_labs) = self._find_valid_sites(cs.atom_sites_frac,
-                                              cs.atom_labels, *com_params)
+            i.basis = box_vecs
+            i.snap_coords([0, 1], tol=1e-14)
 
-        int_std, int_box, int_labs = None, None, None
-        if cs.interstice_sites is not None:
-            (int_std, int_box,
-                int_labs) = self._find_valid_sites(cs.interstice_sites_frac,
-                                                   cs.interstice_labels,
-                                                   *com_params)
+            for j in range(3):
+                edge_con = edge_conditions[j]
+                remove_arr = np.zeros(len(i), dtype=bool)
+                if edge_con[0] == '0':
+                    remove_arr = np.logical_or(remove_arr, i._coords[j] <= 0)
+                elif edge_con[0] == '1':
+                    remove_arr = np.logical_or(remove_arr, i._coords[j] < 0)
+                if edge_con[1] == '0':
+                    remove_arr = np.logical_or(remove_arr, i._coords[j] >= 1)
+                elif edge_con[1] == '1':
+                    remove_arr = np.logical_or(remove_arr, i._coords[j] > 1)
+                i.remove(remove_arr)
 
-        self.lattice_sites = lat_std
-        self.lattice_labels = lat_labs
-
-        self.atom_sites = at_std
-        self.atom_labels = at_labs
-
-        self.interstice_sites = int_std
-        self.interstice_labels = int_labs
-
+        self._sites = self._init_sites(sites)
+        self.box_vecs = box_vecs
         self.bounding_box = bounding_box
         self.crystal_structure = cs
-        self.box_vecs = box_vecs
         self.origin = np.zeros((3, 1))
 
         if origin is not None:
             self.translate(origin)
 
-    def visualise(self, **kwargs):
-        visualise_structure(self, **kwargs)
+    def _init_sites(self, sites):
+        for name, sites_obj in sites.items():
+            setattr(self, name, sites_obj)
+        return sites
+
+    @property
+    def sites(self):
+        return self._sites
+
+    def show(self, **kwargs):
+        gg = GeometryGroup(
+            points={
+                'atoms': self.atoms.basis @ self.atoms,
+                'lattice_sites': self.lattice_sites.basis @ self.lattice_sites,
+            },
+            boxes={
+                'unit cell': Box(edge_vectors=self.crystal_structure.lattice.unit_cell),
+                'box_vecs': Box(edge_vectors=self.box_vecs, origin=self.origin),
+            }
+        )
+        return gg.show(
+            group_points={
+                'atoms': [
+                    {
+                        'label': 'species',
+                        'styles': {
+                            'fill_colour': {
+                                'Zr': 'blue',
+                            },
+                        },
+                    },
+                    {
+                        'label': 'species_order',
+                        'style': {
+                            'outline_colour': {
+                                0: 'red',
+                                1: 'green',
+                            }
+                        }
+                    }
+                ]
+            }
+        )
 
 
 class AtomicMotif(object):
