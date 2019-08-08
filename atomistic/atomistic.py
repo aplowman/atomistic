@@ -72,55 +72,8 @@ class AtomisticStructure(object):
     # - fix methods that deal with `self.crystals` (must use Crystal methods)
     # - fix method `tile_supercell` (`check_overlapping_atoms` will then work)
 
-    crystal_structures : list of CrystalStructure, optional
-    crystal_idx : ndarray of shape (N,), optional
-        Defines to which crystal each atom belongs.
-    lat_crystal_idx : ndarray of shape (M,), optional
-        Defines to which crystal each lattice site belongs
-    species_idx : ndarray of shape (N,), optional
-        Defines to which species each atom belongs, indexed within the atom's
-        crystal_structure. For atom index `i`, this indexes
-        `crystal_structures[
-            crystals[crystal_idx[i]]['cs_idx']]['species_set']`
-        Either specify (`all_species` and `all_species_idx`) or (`species_idx`
-        and `motif_idx`), but not both.
-    motif_idx : ndarray of shape (N,), optional
-        Defines to which motif atom each atom belongs, indexed within the
-        atom's crystal_structure. For atom index `i`, this indexes
-        `crystal_structures[
-            crystals[crystal_idx[i]]['cs_idx']]['species_motif']`
-        Either specify (`all_species` and `all_species_idx`) or (`species_idx`
-        and `motif_idx`), but not both.
-    all_species : ndarray of str, optional
-        1D array of strings representing the distinct species. Either specify
-        (`all_species` and `all_species_idx`) or (`species_idx` and
-        `motif_idx`), but not both.
-    all_species_idx : ndarray of shape (N, ), optional
-        Defines to which species each atom belongs, indexed over the whole
-        AtomisticStructure. This indexes `all_species`. Either specify
-        (`all_species` and `all_species_idx`) or (`species_idx` and
-        `motif_idx`), but not both.
-
-    atom_sites_frac
-    num_atoms_per_crystal
-    num_atoms
-    num_crystals
-    reciprocal_supercell
-
-    Methods
-    -------
-    todo
-
-    TODO:
-    -   Re-write docstrings.
-    -   Consolidate atom/lattice/interstice into a list of Sites objects.
-
-    """
-
-    def __init__(self, supercell, atom_sites, atom_labels, origin=None,
-                 lattice_sites=None, lattice_labels=None, interstice_sites=None,
-                 interstice_labels=None, crystals=None, crystal_structures=None,
-                 overlap_tol=1, tile=None):
+    def __init__(self, supercell, sites, origin=None, crystals=None,
+                 crystal_structures=None, overlap_tol=1, tile=None):
         """Constructor method for AtomisticStructure object."""
 
         if origin is None:
