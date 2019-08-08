@@ -67,19 +67,15 @@ def get_bounding_box(box, bound_vecs=None, padding=0):
     corners_bound = bound_vecs_inv @ corners
 
     tol = 1e-12
-    mins = snap_arr(
-        np.min(corners_bound, axis=2)[:, :, np.newaxis], 0, tol)
-    maxs = snap_arr(
-        np.max(corners_bound, axis=2)[:, :, np.newaxis], 0, tol)
+    mins = snap_arr(np.min(corners_bound, axis=2)[:, :, np.newaxis], 0, tol)
+    maxs = snap_arr(np.max(corners_bound, axis=2)[:, :, np.newaxis], 0, tol)
 
     mins_floor = np.floor(mins) - padding
     maxs_ceil = np.ceil(maxs)
 
     bound_box_origin = np.concatenate(bound_vecs @ mins_floor, axis=1)
-    bound_box_bv = np.concatenate(
-        (maxs_ceil - mins_floor + padding).astype(int), axis=1)
-    bound_box = snap_arr(
-        bound_box_bv.T[:, np.newaxis] * bound_vecs[np.newaxis], 0, tol)
+    bound_box_bv = np.concatenate((maxs_ceil - mins_floor + padding).astype(int), axis=1)
+    bound_box = snap_arr(bound_box_bv.T[:, np.newaxis] * bound_vecs[np.newaxis], 0, tol)
     bound_box_origin_bv = np.concatenate(mins_floor.astype(int), axis=1)
 
     out = {
