@@ -79,20 +79,18 @@ class AtomisticStructure(object):
         if origin is None:
             origin = np.zeros((3, 1))
 
-        self.origin = origin
+        if crystals is None:
+            crystals = []
 
-        self.atom_sites = atom_sites
-        self.atom_labels = atom_labels
+        if crystal_structures is None:
+            crystal_structures = []
+
+        self.origin = origin
+        self._sites = self._init_sites(sites)
         self.supercell = supercell
         self.meta = {}
-
-        self.crystal_structures = AtomisticStructure.init_crystal_structures(
+        self.crystal_structures = CrystalStructure.init_crystal_structures(
             crystal_structures)
-
-        self.lattice_sites = lattice_sites
-        self.lattice_labels = lattice_labels
-        self.interstice_sites = interstice_sites
-        self.interstice_labels = interstice_labels
         self.crystals = crystals
         self._overlap_tol = overlap_tol
 
@@ -106,32 +104,21 @@ class AtomisticStructure(object):
         if tile:
             self.tile_supercell(tile)
 
-    @staticmethod
-    def init_crystal_structures(crystal_structures):
-        """Instantiate crystal structures if parametrisations are passed
-        instead of CrystalStructure objects themselves.
+    def _init_sites(self, sites):
 
-        Parameters
-        ----------
-        crystal_structures : list of (dict or CrystalStructure)
-            If a dict, must have keys:
-                lattice : dict or BravaisLattice
-                motif : dict
+        allowed_sites = ['atoms', 'lattice_sites', 'interstices']
 
-        Returns
-        -------
-        cs_objects : list of CrystalStructure
+        if 'atoms' not in sites:
+            raise ValueError('`sites` must contain a `Sites` object named "atoms".')
 
-        """
+        for name, sites_obj in sites.items():
+            if not isinstance(sites_obj, Sites):
+                raise ValueError('`sites` must be a dict with `Sites` object values.')
+            if name not in allowed_sites:
+                raise ValueError('`sites` named "{}" not allowed.'.format(name))
+            setattr(self, name, sites_obj)
 
-        cs_objects = []
-        for i in crystal_structures:
-            if not isinstance(i, CrystalStructure):
-                i = CrystalStructure(**i)
-
-            cs_objects.append(i)
-
-        return cs_objects
+        return sites
 
     def translate(self, shift):
         """
