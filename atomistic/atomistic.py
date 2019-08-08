@@ -268,8 +268,39 @@ class AtomisticStructure(object):
 
         self.translate(origin)
 
-    def visualise(self, **kwargs):
-        visualise_structure(self, **kwargs)
+    def show(self, **kwargs):
+        gg = GeometryGroup(
+            points={
+                'atoms': self.atoms,
+                'lattice_sites': self.lattice_sites,
+            },
+            boxes={
+                'supercell': Box(edge_vectors=self.supercell),
+            }
+        )
+        return gg.show(
+            group_points={
+                'atoms': [
+                    {
+                        'label': 'species',
+                        'styles': {
+                            'fill_colour': {
+                                'Zr': 'blue',
+                            },
+                        },
+                    },
+                    {
+                        'label': 'species_order',
+                        'style': {
+                            'outline_colour': {
+                                0: 'red',
+                                1: 'green',
+                            }
+                        }
+                    }
+                ]
+            }
+        )
 
     def reorient_to_lammps(self):
         """
