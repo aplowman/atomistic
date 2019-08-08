@@ -237,25 +237,6 @@ class CrystalStructure(object):
         """Alias to the BravaisLattice lattice_sites Sites object."""
         return self.lattice.lattice_sites
 
-    # @property
-    # def atom_sites_frac(self):
-    #     return np.dot(np.linalg.inv(self.lattice.unit_cell), self.atom_sites)
-
-    # @property
-    # def species(self):
-    #     return self.atom_labels['species'][0]
-
-    # @property
-    # def species_idx(self):
-    #     return self.atom_labels['species'][1]
-
-    # @property
-    # def all_species(self):
-    #     return self.species[self.species_idx]
-
-    def visualise(self, **kwargs):
-        visualise_structure(self, **kwargs)
-
     def __repr__(self):
 
         arg_fmt = ' ' * REPR_INDENT
