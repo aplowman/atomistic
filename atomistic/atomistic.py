@@ -131,18 +131,13 @@ class AtomisticStructure(object):
         """
 
         shift = get_column_vector(shift)
+
         self.origin += shift
-        self.atom_sites += shift
+        for i in self.sites:
+            i.translate(shift)
 
-        if self.lattice_sites is not None:
-            self.lattice_sites += shift
-
-        if self.interstice_sites is not None:
-            self.interstice_sites += shift
-
-        if self.crystals is not None:
-            for c_idx in range(len(self.crystals)):
-                self.crystals[c_idx]['origin'] += shift
+        for crystal in self.crystals:
+            crystal.translate(shift)
 
     def rotate(self, rot_mat):
         """
