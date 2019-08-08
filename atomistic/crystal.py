@@ -180,11 +180,12 @@ class CrystalStructure(object):
             }
         }
 
-        sites_dict = {}
+        lat_sites = self.lattice.lattice_sites
+        sites_dict = {'lattice_sites': lat_sites}
         for site_name, site_obj in self.motif.sites.items():
 
             rep_lab = repeat_labels.get(site_name, {})
-            tiled_sites = self.lattice_sites.tile(site_obj, rep_lab)
+            tiled_sites = lat_sites.tile(site_obj, rep_lab)
 
             setattr(self, site_name, tiled_sites)
             sites_dict.update({
