@@ -393,25 +393,23 @@ class CrystalBox(Crystal):
     def __init__(self, crystal_structure=None, box_vecs=None, edge_conditions=None,
                  origin=None):
         """
-        Fill a parallelopiped with atoms belonging to a given crystal
-        structure.
+        Fill a parallelepiped with atoms belonging to a given crystal structure.
 
         Parameters
         ----------
         crystal_structure : CrystalStructure
         box_vecs : ndarray of shape (3, 3)
-            Array of column vectors representing the edge vectors of the
-            parallelopiped to fill with crystal.
+            Array of column vectors representing the edge vectors of the parallelepiped
+            to fill with crystal.
         edge_conditions : list of str, optional
             Determines if atom and lattice sites on the edges of the `box_vecs`
-            parallelopiped should be included. It is a list of three
-            two-character strings, each being a `1` or `0`. These refer to
-            whether atoms are included (`1`) or not (`0`) for the near and far
-            boundary along the dimension given by the position in the list. The
-            near boundary is the boundary of the crystal box which intercepts
-            the crystal box origin. Default is None, in which case it will be
-            set to ['10', '10', '10']. For a given component, say x, the
-            strings are decoded in the following way:
+            parallelepiped should be included. It is a list of three two-character
+            strings, each being a `1` or `0`. These refer to whether atoms are included
+            (`1`) or not (`0`) for the near and far boundary along the dimension given by
+            the position in the list. The near boundary is the boundary of the crystal box
+            which intercepts the crystal box origin. Default is None, in which case it
+            will be set to ['10', '10', '10']. For a given component, say x, the strings
+            are decoded in the following way:
                 '00': 0 <  x <  1
                 '01': 0 <  x <= 1
                 '10': 0 <= x <  1
@@ -422,14 +420,13 @@ class CrystalBox(Crystal):
         Notes
         -----
         Algorithm proceeds as follows:
-        1.  Form a bounding parallelopiped around the parallelopiped defined by
+        1.  Form a bounding parallelepiped around the parallelepiped defined by
             `box_vecs`, whose edge vectors are parallel to the lattice vectors.
-        2.  Find all sites within and on the edges/corners of that bounding
-            box.
+        2.  Find all sites within and on the edges/corners of that bounding box.
         3.  Transform sites to the box basis.
-        4.  Find valid sites, which have vector components in the interval
-            [0, 1] in the box basis, where the interval may be (half-)closed
-            /open depending on the specified edge conditions.
+        4.  Find valid sites, which have vector components in the interval [0, 1] in the
+            box basis, where the interval may be (half-)closed/open depending on the
+            specified edge conditions.
 
         """
 
