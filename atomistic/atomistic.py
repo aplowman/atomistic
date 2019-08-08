@@ -65,37 +65,12 @@ class AtomisticStructureException(Exception):
 
 
 class AtomisticStructure(object):
-    """
-    Class to represent crystals of atoms
+    'Class to represent crystals of atoms'
 
-    Attributes
-    ----------
-    atom_sites : ndarray of shape (3, N)
-        Array of column vectors representing the atom positions.
-    supercell : ndarray of shape (3, 3)
-        Array of column vectors representing supercell edge vectors.
-    lattice_sites : ndarray of shape (3, M), optional
-        Array of column vectors representing lattice site positions.
-    crystals : list of dict of (str : ndarray or int), optional
-        Each dict contains at least these keys:
-            `crystal` : ndarray of shape (3, 3)
-                Array of column vectors representing the crystal edge vectors.
-            `origin` : ndarray of shape (3, 1)
-                Column vector specifying the origin of this crystal.
-        Additional keys are:
-            'cs_idx': int
-                Index of `crystal_structures`, defining to which
-                CrystalStructure this crystal belongs.
-            `cs_orientation`: ndarray of shape (3, 3)
-                Rotation matrix which rotates the CrystalStructure lattice
-                unit cell from the initialised BravaisLattice object to some
-                other desired orientation.
-            'cs_origin': list of float or int
-                Origin of the CrystalStructure unit cell in multiples of the
-                CrystalStructure unit cell vectors. For integer values, this
-                will not affect the atomic structure of the crystal. To
-                produce a rigid translation of the atoms within the crystal,
-                non-integer values can be used.
+    # TODO:
+    # - store sites in sites dict attribute sites['atoms'] etc
+    # - fix methods that deal with `self.crystals` (must use Crystal methods)
+    # - fix method `tile_supercell` (`check_overlapping_atoms` will then work)
 
     crystal_structures : list of CrystalStructure, optional
     crystal_idx : ndarray of shape (N,), optional
