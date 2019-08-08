@@ -321,37 +321,6 @@ class Crystal(object):
         for i in self.sites.values():
             i.rotate(rot_mat, centre=self.origin)
 
-    @property
-    def atom_sites_frac(self):
-        return np.dot(np.linalg.inv(self.box_vecs.vecs), self.atom_sites)
-
-    @property
-    def lattice_sites_frac(self):
-        if self.lattice_sites is not None:
-            return np.dot(np.linalg.inv(self.box_vecs.vecs), self.lattice_sites)
-        else:
-            return None
-
-    @property
-    def interstice_sites_frac(self):
-        if self.interstice_sites is not None:
-            return np.dot(np.linalg.inv(self.box_vecs.vecs),
-                          self.interstice_sites)
-        else:
-            return None
-
-    @property
-    def species(self):
-        return self.atom_labels['species'][0]
-
-    @property
-    def species_idx(self):
-        return self.atom_labels['species'][1]
-
-    @property
-    def all_species(self):
-        return self.species[self.species_idx]
-
 
 class CrystalBox(Crystal):
     """
