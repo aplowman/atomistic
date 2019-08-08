@@ -246,7 +246,7 @@ class AtomisticStructure(object):
             One of "atom", "lattice", "interstice" or "all".
         dirs : list of int, optional
             Supercell direction indices to apply wrapping. Default is None, in
-            which case atoms are wrapped in all directions.            
+            which case atoms are wrapped in all directions.
 
         """
 
@@ -260,54 +260,18 @@ class AtomisticStructure(object):
 
             for d in dirs:
                 if d not in [0, 1, 2]:
-                    raise ValueError('`dirs` must be a list whose elements are'
+                    raise ValueError('`dirs` must be a list whose elements are '
                                      '0, 1 or 2.')
 
-        allowed_sites_str = [
-            'atom',
-            'lattice',
-            'interstice',
-            'all',
-        ]
+        for name, i in self.sites.items():
+            if sites == name or sites == 'all':
+                i.basis = self.supercell
+                i._coords[:, dirs] -= np.floor(i._coords[:, dirs])
+                i.basis = None
 
-        if not isinstance(sites, str) or sites not in allowed_sites_str:
-            raise ValueError('`sites` must be a string and one of: "atom", '
-                             '"lattice", "interstice" or "all".')
-
-        if sites == 'all':
-            sites_arr = [
-                self.atom_sites,
-                self.lattice_sites,
-                self.interstice_sites
-            ]
-        elif sites == 'atom':
-            sites_arr = [self.atom_sites]
-        elif sites == 'lattice':
-            sites_arr = [self.lattice_sites]
-        elif sites == 'interstice':
-            sites_arr = [self.interstice_sites]
-
-        for s_idx in range(len(sites_arr)):
-
-            s = sites_arr[s_idx]
-            if s is None:
-                continue
-
-            # Get sites in supercell basis:
-            s_sup = np.dot(self.supercell_inv, s)
-
-            # Wrap atoms:
-            s_sup_wrp = np.copy(s_sup)
-            s_sup_wrp[dirs] -= np.floor(s_sup_wrp[dirs])
-
-            # Snap to 0:
-            # s_sup_wrp = vectors.snap_arr_to_val(s_sup_wrp, 0, 1e-12)
-
-            # Convert back to Cartesian basis
-            s_std_wrp = np.dot(self.supercell, s_sup_wrp)
-
-            # Update attributes:
-            sites_arr[s_idx][:] = s_std_wrp
+    @property
+    def sites(self):
+        return self._sites
 
     @property
     def supercell_inv(self):
