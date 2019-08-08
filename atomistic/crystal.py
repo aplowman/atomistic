@@ -232,10 +232,33 @@ class CrystalStructure(object):
     def sites(self):
         return self._sites
 
-    @property
-    def lattice_sites(self):
-        """Alias to the BravaisLattice lattice_sites Sites object."""
-        return self.lattice.lattice_sites
+    def show(self, **kwargs):
+        gg = GeometryGroup(
+            points={'atoms': self.atoms.basis @ self.atoms},
+            boxes={'unit cell': Box(edge_vectors=self.lattice.unit_cell)},
+        )
+        group_points = {
+            'atoms': [
+                {
+                    'label': 'species',
+                    'styles': {
+                        'fill_colour': {
+                            'Zr': 'blue',
+                        },
+                    },
+                },
+                {
+                    'label': 'species_order',
+                    'styles': {
+                        'outline_colour': {
+                            0: 'green',
+                            1: 'purple',
+                        },
+                    },
+                },
+            ],
+        }
+        return gg.show(group_points=group_points)
 
     def __repr__(self):
 
