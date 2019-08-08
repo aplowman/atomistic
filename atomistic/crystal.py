@@ -197,6 +197,32 @@ class CrystalStructure(object):
 
         return sites_dict
 
+    @classmethod
+    def init_crystal_structures(cls, crystal_structures):
+        """Instantiate crystal structures if parametrisations are passed instead of
+        CrystalStructure objects themselves.
+
+        Parameters
+        ----------
+        crystal_structures : list of (dict or CrystalStructure)
+            If a dict, must have keys:
+                lattice : dict or BravaisLattice
+                motif : dict
+
+        Returns
+        -------
+        cs_objects : list of CrystalStructure
+
+        """
+
+        cs_objects = []
+        for i in crystal_structures:
+            if not isinstance(i, CrystalStructure):
+                i = cls(**i)
+            cs_objects.append(i)
+
+        return cs_objects
+
     @property
     def lattice(self):
         return self._lattice
