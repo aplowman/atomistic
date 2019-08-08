@@ -288,6 +288,7 @@ class Crystal(object):
     interstice_sites = None
     box_vecs = None
     atom_labels = None
+    sites = None
 
     def translate(self, shift):
         """
@@ -301,13 +302,9 @@ class Crystal(object):
 
         shift = get_column_vector(shift)
         self.origin += shift
-        self.atom_sites += shift
 
-        if self.lattice_sites is not None:
-            self.lattice_sites += shift
-
-        if self.interstice_sites is not None:
-            self.interstice_sites += shift
+        for i in self.sites.values():
+            i.translate(shift)
 
     def rotate(self, rot_mat):
         """
@@ -321,18 +318,8 @@ class Crystal(object):
 
         """
 
-        origin = np.copy(self.origin)
-        self.translate(-origin)
-
-        self.atom_sites = np.dot(rot_mat, self.atom_sites)
-
-        if self.lattice_sites is not None:
-            self.lattice_sites = np.dot(rot_mat, self.lattice_sites)
-
-        if self.interstice_sites is not None:
-            self.interstice_sites = np.dot(rot_mat, self.interstice_sites)
-
-        self.translate(origin)
+        for i in self.sites.values():
+            i.rotate(rot_mat, centre=self.origin)
 
     @property
     def atom_sites_frac(self):
