@@ -308,7 +308,7 @@ class Crystal(object):
         for i in self.sites.values():
             i.translate(shift)
 
-    def rotate(self, rot_mat):
+    def rotate(self, rot_mat, centre=None):
         """
         Rotate the crystal about its origin according to a rotation matrix.
 
@@ -320,8 +320,11 @@ class Crystal(object):
 
         """
 
+        if centre is None:
+            centre = self.origin
+
         for i in self.sites.values():
-            i.rotate(rot_mat, centre=self.origin)
+            i.rotate(rot_mat, centre=centre)
 
 
 class CrystalBox(Crystal):
@@ -490,6 +493,10 @@ class CrystalBox(Crystal):
     @property
     def sites(self):
         return self._sites
+
+    @property
+    def centroid(self):
+        return get_box_corners(self.box_vecs, origin=self.origin).mean(2).T
 
     def show(self, **kwargs):
         gg = GeometryGroup(

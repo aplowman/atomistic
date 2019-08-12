@@ -7,32 +7,11 @@ import numpy as np
 import mendeleev
 import spglib
 from vecmaths import rotation, geometry
+from gemo import GeometryGroup, Box, Sites
 
 from atomistic.visualise import visualise_structure
 from atomistic.utils import get_column_vector
 from atomistic.crystal import CrystalStructure
-
-
-def get_box_centre(box, origin=None):
-    """
-    Find the centre of a parallelepiped.
-
-    TODO: add to vecmaths
-
-    Parameters
-    ----------
-    box : ndarray of shape (3, 3)
-        Array of edge vectors defining a parallelepiped.
-    origin : ndarray of shape (3, 1)
-        Origin of the parallelepiped.
-
-    Returns
-    -------
-    ndarray of shape (3, N)
-
-    """
-
-    return geometry.get_box_corners(box, origin=origin).mean(2).T
 
 
 def get_vec_distances(vecs):
@@ -94,15 +73,14 @@ class AtomisticStructure(object):
         self.crystals = crystals
         self._overlap_tol = overlap_tol
 
-        self.check_overlapping_atoms(overlap_tol)
+        # self.check_overlapping_atoms(overlap_tol)
 
         # Check handedness:
         if self.volume < 0:
-            raise ValueError('Supercell does not form a right - handed '
-                             'coordinate system.')
+            raise ValueError('Supercell does not form a right-handed coordinate system.')
 
-        if tile:
-            self.tile_supercell(tile)
+        # if tile:
+        #     self.tile_supercell(tile)
 
     def _init_sites(self, sites):
 
@@ -152,31 +130,13 @@ class AtomisticStructure(object):
 
         """
 
-        origin = np.copy(self.origin)
-        self.translate(-origin)
-
         self.supercell = np.dot(rot_mat, self.supercell)
-        self.atom_sites = np.dot(rot_mat, self.atom_sites)
 
-        if self.lattice_sites is not None:
-            self.lattice_sites = np.dot(rot_mat, self.lattice_sites)
+        for i in self.sites:
+            i.rotate(rot_mat, centre=self.origin)
 
-        if self.interstice_sites is not None:
-            self.interstice_sites = np.dot(rot_mat, self.interstice_sites)
-
-        if self.crystals is not None:
-
-            for c_idx in range(len(self.crystals)):
-
-                c = self.crystals[c_idx]
-
-                c['crystal'] = np.dot(rot_mat, c['crystal'])
-                c['origin'] = np.dot(rot_mat, c['origin'])
-
-                if 'cs_orientation' in c.keys():
-                    c['cs_orientation'] = np.dot(rot_mat, c['cs_orientation'])
-
-        self.translate(origin)
+        for crystal in self.crystals:
+            crystal.rotate(rot_mat, centre=self.origin)
 
     def show(self, **kwargs):
         gg = GeometryGroup(
@@ -279,38 +239,11 @@ class AtomisticStructure(object):
 
     @property
     def atom_sites_frac(self):
-        return np.dot(self.supercell_inv, self.atom_sites)
-
-    @property
-    def lattice_sites_frac(self):
-        if self.lattice_sites is not None:
-            return np.dot(self.supercell_inv, self.lattice_sites)
-        else:
-            return None
-
-    @property
-    def interstice_sites_frac(self):
-        if self.interstice_sites is not None:
-            return np.dot(self.supercell_inv, self.interstice_sites)
-        else:
-            return None
-
-    @property
-    def species(self):
-        return self.atom_labels['species'][0]
-
-    @property
-    def species_idx(self):
-        return self.atom_labels['species'][1]
-
-    @property
-    def all_species(self):
-        """Get the species of each atom as a string array."""
-        return self.species[self.species_idx]
+        return self.atoms.get_coords(new_basis=self.supercell)
 
     @property
     def spglib_cell(self):
-        """Returns a tuple representing valid input for the spglib library."""
+        'Returns a tuple representing valid input for the `spglib` library.'
 
         cell = (self.supercell.T,
                 self.atom_sites_frac.T,
@@ -324,18 +257,16 @@ class AtomisticStructure(object):
         if self.crystals is None:
             return None
 
-        na = []
-        for c_idx in range(len(self.crystals)):
-            crystal_idx_tup = self.atom_labels['crystal_idx']
-            crystal_idx = crystal_idx_tup[0][crystal_idx_tup[1]]
-            na.append(np.where(crystal_idx == c_idx)[0].shape[0])
+        num_dict = dict(zip(self.atoms.labels['crystal_idx'].unique_values,
+                            self.atoms.labels['crystal_idx'].values_count))
+        num_atoms = [value for (key, value) in sorted(num_dict.items())]
 
-        return na
+        return num_atoms
 
     @property
     def num_atoms(self):
         """Computes total number of atoms."""
-        return self.atom_sites.shape[1]
+        return len(self.atoms)
 
     @property
     def num_crystals(self):
@@ -376,14 +307,10 @@ class AtomisticStructure(object):
             direction.
 
         """
+        recip_mags = np.linalg.norm(self.reciprocal_supercell, axis=0)
+        grid = np.ceil(np.round(recip_mags / (separation * 2 * np.pi), decimals=8))
 
-        recip = self.reciprocal_supercell
-        grid = np.ceil(np.round(
-            np.linalg.norm(recip, axis=0) / (separation * 2 * np.pi),
-            decimals=8)
-        ).astype(int)
-
-        return grid
+        return grid.astype(int)
 
     def get_kpoint_spacing(self, grid):
         """
@@ -401,18 +328,15 @@ class AtomisticStructure(object):
             directions.
 
         """
+        grid = np.array(grid)
+        sep = np.linalg.norm(self.reciprocal_supercell, axis=0) / (grid * 2 * np.pi)
 
-        recip = self.reciprocal_supercell
-        seps = np.linalg.norm(recip, axis=0) / (np.array(grid) * 2 * np.pi)
-
-        return seps
+        return sep
 
     @property
-    def crystal_centres(self):
-        """Get the midpoints of each crystal in the structure."""
-
-        return [get_box_centre(c['crystal'], origin=c['origin'])
-                for c in self.crystals]
+    def centroid(self):
+        'Get supercell centroid.'
+        return geometry.get_box_corners(self.supercell, origin=self.origin).mean(2).T
 
     def tile_supercell(self, tiles):
         """
@@ -582,24 +506,26 @@ class AtomisticStructure(object):
     def get_sym_ops(self):
         return spglib.get_symmetry(self.spglib_cell)
 
-    def shift_atoms(self, shift, wrap=False):
+    def shift_sites(self, shift, wrap=False):
         """
-        Perform a rigid shift on all atoms, in fractional supercell coordinates.
+        Perform a rigid shift on all sites, in fractional supercell coordinates.
 
         Parameters
         ----------
-        shift : list or tuple of length three or ndarry of shape (3,) of float
+        shift : list or tuple of length three or ndarry of size (3,) of float
             Fractional supercell coordinates to translate all atoms by.
         wrap : bool
             If True, wrap atoms to within the supercell edges after shift.
         """
 
-        shift = np.array(shift)[:, np.newaxis]
+        shift = get_column_vector(shift)
         shift_std = np.dot(self.supercell, shift)
-        self.atom_sites += shift_std
+
+        for i in self.sites.values():
+            i += shift_std
 
         if wrap:
-            self.wrap_sites_to_supercell(sites='atom')
+            self.wrap_sites_to_supercell(sites='all')
 
     def add_vac(self, thickness, dir_idx, position=1):
         """
@@ -668,5 +594,7 @@ class AtomisticStructure(object):
     @property
     def volume(self):
         """Get the volume of the supercell."""
-        sup = self.supercell
-        return np.dot(np.cross(sup[:, 0], sup[:, 1]), sup[:, 2])
+        vol = np.dot(np.cross(self.supercell[:, 0],
+                              self.supercell[:, 1]),
+                     self.supercell[:, 2])
+        return vol
