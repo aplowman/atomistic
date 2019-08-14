@@ -14,6 +14,17 @@ from atomistic.utils import get_column_vector
 from atomistic.crystal import CrystalStructure
 
 
+def get_vec_squared_distances(vecs):
+    'Find the squared distances between all column vectors.'
+
+    # Get indices of unique pairs:
+    idx = np.array(list(combinations(range(vecs.shape[1]), 2))).T
+    b = vecs.T[idx]
+    dist_sq = np.sum((b[0] - b[1])**2, axis=1)
+
+    return dist_sq
+
+
 def get_vec_distances(vecs):
     """
     Find the Euclidean distances between all unique column vector
@@ -31,12 +42,7 @@ def get_vec_distances(vecs):
 
     """
 
-    # Get indices of unique pairs:
-    idx = np.array(list(combinations(range(vecs.shape[1]), 2))).T
-    b = vecs.T[idx]
-    dist = np.sqrt(np.sum((b[0] - b[1])**2, axis=1))
-
-    return dist
+    return np.sqrt(get_vec_squared_distances(vecs))
 
 
 class AtomisticStructureException(Exception):
@@ -73,7 +79,7 @@ class AtomisticStructure(object):
         self.crystals = crystals
         self._overlap_tol = overlap_tol
 
-        # self.check_overlapping_atoms(overlap_tol)
+        self.check_overlapping_atoms(overlap_tol)
 
         # Check handedness:
         if self.volume < 0:
@@ -378,7 +384,7 @@ class AtomisticStructure(object):
 
         return tiled_sites
 
-    def get_interatomic_dist(self, periodic=True):
+    def get_squared_interatomic_dist(self, periodic=True):
         """
         Find the distances between unique atom pairs across the whole
         structure.
@@ -402,12 +408,12 @@ class AtomisticStructure(object):
 
         """
         if periodic:
-            atms = self.get_tiled_sites(
-                self.atom_sites, self.atom_labels, [2, 2, 2])[0]
+            atoms = self.get_tiled_sites([2, 2, 2])['atoms']._coords
         else:
-            atms = self.atom_sites
+            atoms = self.atoms._coords
 
-        return get_vec_distances(atms)
+        dist_sq = get_vec_squared_distances(atoms)
+        return dist_sq
 
     def check_overlapping_atoms(self, tol=None):
         """
@@ -429,11 +435,12 @@ class AtomisticStructure(object):
         if tol is None:
             tol = self._overlap_tol
 
-        dist = self.get_interatomic_dist()
-        if np.any(dist < tol):
-            raise AtomisticStructureException('Found overlapping atoms. '
-                                              'Minimum separation: '
-                                              '{:.3f}'.format(np.min(dist)))
+        dist_sq = self.get_squared_interatomic_dist()
+        if np.any(dist_sq < tol**2):
+            min_dist = np.sqrt(np.min(dist_sq))
+            msg = ('Found overlapping atoms. Minimum '
+                   'separation: {:.3f}'.format(min_dist))
+            raise AtomisticStructureException(msg)
 
     def get_sym_ops(self):
         return spglib.get_symmetry(self.spglib_cell)
