@@ -139,38 +139,48 @@ class AtomisticStructure(object):
             crystal.rotate(rot_mat, centre=self.origin)
 
     def show(self, **kwargs):
-        gg = GeometryGroup(
-            points={
-                'atoms': self.atoms,
-                'lattice_sites': self.lattice_sites,
-            },
-            boxes={
-                'supercell': Box(edge_vectors=self.supercell),
-            }
-        )
-        return gg.show(
-            group_points={
-                'atoms': [
-                    {
-                        'label': 'species',
-                        'styles': {
-                            'fill_colour': {
-                                'Zr': 'blue',
-                            },
+        points = {k: v for k, v in self.sites.items()}
+        boxes = {'supercell': Box(edge_vectors=self.supercell)}
+        for c_idx, c in enumerate(self.crystals):
+            boxes.update({
+                'crystal {}'.format(c_idx): Box(edge_vectors=c.box_vecs, origin=c.origin)
+            })
+        gg = GeometryGroup(points=points, boxes=boxes)
+        group_points = {
+            'atoms': [
+                {
+                    'label': 'species',
+                    'styles': {
+                        'fill_colour': {
+                            'Zr': 'blue',
                         },
                     },
-                    {
-                        'label': 'species_order',
-                        'style': {
-                            'outline_colour': {
-                                0: 'red',
-                                1: 'green',
-                            }
+                },
+                {
+                    'label': 'species_order',
+                    'style': {
+                        'outline_colour': {
+                            0: 'red',
+                            1: 'green',
                         }
                     }
-                ]
+                }
+            ],
+        }
+        style_points = {
+            'lattice_sites': {
+                'marker_symbol': 'cross',
+                'marker_colour': 'gray',
+                'marker_size': 5,
+            },
+            'interstices': {
+                'marker_symbol': 'square-open',
+                'marker_colour': 'pink',
+                'marker_size': 4,
             }
-        )
+        }
+        vis = gg.show(group_points=group_points, style_points=style_points)
+        return vis
 
     def reorient_to_lammps(self):
         """
