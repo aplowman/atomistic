@@ -348,10 +348,8 @@ class AtomisticStructure(object):
         'Get supercell centroid.'
         return geometry.get_box_corners(self.supercell, origin=self.origin).mean(2).T
 
-    def tile_supercell(self, tiles):
-        """
-        Tile supercell and its sites by some integer factors in each supercell 
-        direction.
+    def tile(self, tiles):
+        """Tile by some integer factors in each supercell direction.
 
         Parameters
         ----------
@@ -359,102 +357,26 @@ class AtomisticStructure(object):
             Number of repeats in each supercell direction.
 
         """
-        invalid_msg = ('`tiles` must be a tuple or list of three integers '
-                       'greater than 0.')
-
-        if isinstance(tiles, np.ndarray):
-            tiles = np.squeeze(tiles).tolist()
-
-        if len(tiles) != 3:
-            raise ValueError(invalid_msg)
-
-        for t in tiles:
-            if not isinstance(t, int) or t < 1:
-                raise ValueError(invalid_msg)
-
-        tl_atm, tl_atm_lb = self.get_tiled_sites(
-            self.atom_sites, self.atom_labels, tiles)
-
-        self.atom_sites = tl_atm
-        self.atom_labels = tl_atm_lb
-
-        if self.lattice_sites is not None:
-            tl_lat, tl_lat_lb = self.get_tiled_sites(
-                self.lattice_sites, self.lattice_labels, tiles)
-
-            self.lattice_sites = tl_lat
-            self.lattice_labels = tl_lat_lb
-
-        if self.interstice_sites is not None:
-            tl_int, tl_int_lb = self.get_tiled_sites(
-                self.interstice_sites, self.interstice_labels, tiles)
-
-            self.interstice_sites = tl_int
-            self.interstice_labels = tl_int_lb
-
+        self._sites = self.get_tiled_sites(tiles)
         self.supercell *= tiles
 
-    def get_tiled_sites(self, sites, site_labels, tiles):
-        """
-        Get sites (atoms, lattice, interstice) and site labels tiled by some
-        integer factors in each supercell direction.
-
-        Sites are tiled in the positive supercell directions.
+    def get_tiled_sites(self, tiles):
+        """Get sites, tiled by some integer factors in each supercell direction.
 
         Parameters
         ----------
         tiles : tuple or list of length 3 or ndarray of size 3
             Number of repeats in each supercell direction.
 
-        Returns
-        -------
-        sites_tiled : ndarray
-        labels_tiled : dict
-
         """
 
-        invalid_msg = ('`tiles` must be a tuple or list of three integers '
-                       'greater than 0.')
+        grid = [list(range(0, i)) for i in tiles]
+        origin_coords = np.vstack(np.meshgrid(*grid)).reshape((3, -1))
+        origin_sites = Sites(coords=origin_coords, basis=self.supercell)
+        origin_sites.basis = None
+        tiled_sites = {k: origin_sites.tile(v) for k, v in self.sites.items()}
 
-        if isinstance(tiles, np.ndarray):
-            tiles = np.squeeze(tiles).tolist()
-
-        if len(tiles) != 3:
-            raise ValueError(invalid_msg)
-
-        sites_tiled = np.copy(sites)
-        labels_tiled = {k: tuple(np.copy(i) for i in v)
-                        for k, v in site_labels.items()}
-
-        for t_idx, t in enumerate(tiles):
-
-            if t == 1:
-                continue
-
-            if not isinstance(t, int) or t < 1:
-                raise ValueError(invalid_msg)
-
-            v = self.supercell[:, t_idx:t_idx + 1]
-            v_range = v * np.arange(1, t)
-
-            all_t = v_range.T[:, :, np.newaxis]
-
-            sites_stack = all_t + sites_tiled
-            add_sites = np.hstack(sites_stack)
-            sites_tiled = np.hstack([sites_tiled, add_sites])
-
-            labels_tiled_new = {}
-            for k, v in labels_tiled.items():
-
-                add_label_idx = np.tile(v[1], t - 1)
-                new_label_idx = np.concatenate((v[1], add_label_idx))
-                labels_tiled_new.update({
-                    k: (v[0], new_label_idx)
-                })
-
-            labels_tiled = labels_tiled_new
-
-        return sites_tiled, labels_tiled
+        return tiled_sites
 
     def get_interatomic_dist(self, periodic=True):
         """
