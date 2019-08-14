@@ -356,65 +356,32 @@ class Bicrystal(AtomisticStructure):
         sup_type = self.meta['supercell_type']
 
         if 'bulk_bicrystal' in sup_type:
-            raise NotImplementedError(
-                'Cannot apply relative shift to a bulk_bicrystal.')
+            msg = 'Cannot apply relative shift to a bulk_bicrystal.'
+            raise NotImplementedError(msg)
 
         elif all([i not in sup_type for i in ['bicrystal', 'surface_bicrystal']]):
-            raise NotImplementedError(
-                'Cannot apply relative shift to this supercell type.')
+            msg = 'Cannot apply relative shift to this supercell type.'
+            raise NotImplementedError(msg)
 
         shift_frac_gb = np.array(shift).squeeze()
 
         if np.any(shift_frac_gb < -1) or np.any(shift_frac_gb > 1):
             raise ValueError('Elements of `shift` should be between -1 and 1.')
 
-        shift_crystal = self.crystals[crystal_idx]
-        shift_frac = np.zeros((3, 1))
-        shift_frac[self.boundary_idx, [0, 0]] = shift_frac_gb
-        shift_std = np.dot(shift_crystal['crystal'], shift_frac)
+        shift_frac = np.zeros(3)
+        shift_frac[self.boundary_idx] = shift_frac_gb
+        shift_std = self.supercell @ shift_frac[:, None]
 
-        # Translate shifted grain sites:
-        atm_shiftd = np.copy(self.atom_sites)
-        atm_crys_lab = self.atom_labels['crystal_idx']
-        atm_crys_idx = atm_crys_lab[0][atm_crys_lab[1]]
-        atm_shift_cols = np.where(atm_crys_idx == crystal_idx)[0]
-        atm_shiftd[:, atm_shift_cols] += shift_std
-        self.atom_sites = atm_shiftd
-
-        if self.lattice_sites is not None:
-            lat_shiftd = np.copy(self.lattice_sites)
-            lat_crys_lab = self.lattice_labels['crystal_idx']
-            lat_crys_idx = lat_crys_lab[0][lat_crys_lab[1]]
-            lat_shift_cols = np.where(lat_crys_idx == crystal_idx)[0]
-            lat_shiftd[:, lat_shift_cols] += shift_std
-            self.lattice_sites = lat_shiftd
-
-        if self.interstice_sites is not None:
-            int_shiftd = np.copy(self.interstice_sites)
-            int_crys_lab = self.interstice_labels['crystal_idx']
-            int_crys_idx = int_crys_lab[0][int_crys_lab[1]]
-            int_shift_cols = np.where(int_crys_idx == crystal_idx)[0]
-            int_shiftd[:, int_shift_cols] += shift_std
-            self.interstice_sites = int_shiftd
-
-        # Update attributes:
-        self.crystals[crystal_idx].update({
-            'origin': shift_crystal['origin'] + shift_std
-        })
+        self.crystals[crystal_idx].translate(shift_std)
 
         if self.relative_shift != [0, 0]:
-            warnings.warn('`relative_shift` is already non-zero. Resetting to '
-                          'new value.')
+            warnings.warn('`relative_shift` is already non-zero. Adding new value.')
         self.relative_shift = [i + j for i,
                                j in zip(shift_frac_gb.tolist(), self.relative_shift)]
 
         if self.maintain_inv_sym:
             # Modify out-of-boundary supercell vector
-            sup_shift = np.copy(self.supercell)
-            sup_shift[:, self.non_boundary_idx][:, None] += (2 * shift_std)
-
-            # Update attribute:
-            self.supercell = sup_shift
+            self.supercell[:, self.non_boundary_idx, None] += (2 * shift_std)
 
         if wrap:
             self.wrap_sites_to_supercell()
