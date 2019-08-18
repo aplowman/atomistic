@@ -4,3 +4,4 @@ rope
 autopep8
 twine
 wheel
+ruamel.yaml
