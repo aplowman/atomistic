@@ -290,7 +290,26 @@ class Crystal(object):
     interstice_sites = None
     box_vecs = None
     atom_labels = None
-    sites = None
+    _sites = None
+    atomistic_structure = None
+
+    @property
+    def crystal_idx(self):
+        if self.atomistic_structure:
+            for idx, i in enumerate(self.atomistic_structure.crystals):
+                if i is self:
+                    return idx
+        else:
+            return None
+
+    @property
+    def sites(self):
+        if self.atomistic_structure:
+            sites = {k: v.filter(crystal_idx=self.crystal_idx)
+                     for k, v in self.atomistic_structure.sites.items()}
+        else:
+            sites = self._sites
+        return sites
 
     def translate(self, shift):
         """
@@ -310,7 +329,7 @@ class Crystal(object):
 
     def rotate(self, rot_mat, centre=None):
         """
-        Rotate the crystal about its origin according to a rotation matrix.
+        Rotate the crystal about a point according to a rotation matrix.
 
         Parameters
         ----------
@@ -322,6 +341,8 @@ class Crystal(object):
 
         if centre is None:
             centre = self.origin
+
+        self.origin = rot_mat @ (self.origin - centre) + centre
 
         for i in self.sites.values():
             i.rotate(rot_mat, centre=centre)
@@ -375,9 +396,9 @@ class CrystalBox(Crystal):
 
         self.bounding_box['bound_box_origin'] += shift
 
-    def rotate(self, rot_mat):
+    def rotate(self, rot_mat, centre=None):
         """
-        Rotate the crystal box about its origin according to a rotation matrix.
+        Rotate the crystal box about a point according to a rotation matrix.
 
         Parameters
         ----------
@@ -386,12 +407,15 @@ class CrystalBox(Crystal):
             rotate them about a particular axis and angle.
 
         """
+        if centre is None:
+            centre = self.origin
 
-        super().rotate(rot_mat)
+        super().rotate(rot_mat, centre)
 
-        self.box_vecs = np.dot(rot_mat, self.box_vecs)
-        self.bounding_box['bound_box'][0] = np.dot(
-            rot_mat, self.bounding_box['bound_box'][0])
+        self.box_vecs = rot_mat @ self.box_vecs
+
+        # self.bounding_box['bound_box'][0] = np.dot(
+        #     rot_mat, self.bounding_box['bound_box'][0]) # TODO
 
     def __init__(self, crystal_structure=None, box_vecs=None, edge_conditions=None,
                  origin=None):
@@ -489,10 +513,6 @@ class CrystalBox(Crystal):
         for name, sites_obj in sites.items():
             setattr(self, name, sites_obj)
         return sites
-
-    @property
-    def sites(self):
-        return self._sites
 
     @property
     def centroid(self):
