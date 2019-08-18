@@ -128,19 +128,17 @@ class Bicrystal(AtomisticStructure):
 
     def apply_boundary_vac(self, thickness, func, wrap=False, **kwargs):
         """
-        Apply vacuum to the Bicrystal in the direction normal to the grain
-        boundary, distributed according to a function.
+        Apply vacuum to the Bicrystal in the direction normal to the grain boundary,
+        distributed according to one of three functions.
 
         Parameters
         ----------
         thickness : float
-            The length by which the supercell will be extended in the GB
-            normal direction. This is not necessarily a supercell vector
-            direction.
+            The length by which the supercell will be extended in the GB normal direction.
+            This is not necessarily a supercell vector direction.
         func : str
-            One of "sigmoid", "flat" or "linear". Describes how the vacuum
-            should be distributed across the supercell in the GB normal
-            direction.
+            One of "sigmoid", "flat" or "linear". Describes how the vacuum should be
+            distributed across the supercell in the GB normal direction.
         kwargs : dict
             Additional arguments to pass to the function.
 
@@ -154,19 +152,19 @@ class Bicrystal(AtomisticStructure):
         ]
 
         if func not in allowed_func:
-            raise ValueError('"{}" is not an allowed function name to use for'
-                             ' applying grain boundary vacuum.'.format(func))
+            msg = ('"{}" is not an allowed function name to use for applying grain '
+                   'boundary vacuum.'.format(func))
+            raise ValueError(msg)
 
         sup_type = self.meta['supercell_type']
 
         if 'bulk_bicrystal' in sup_type:
-            raise NotImplementedError(
-                'Cannot apply boundary vacuum to a bulk_bicrystal.')
+            msg = 'Cannot apply boundary vacuum to a bulk_bicrystal.'
+            raise NotImplementedError(msg)
 
-        elif all([i not in sup_type for i in ['bicrystal',
-                                              'surface_bicrystal']]):
-            raise NotImplementedError(
-                'Cannot apply boundary vacuum to this supercell type.')
+        elif all([i not in sup_type for i in ['bicrystal', 'surface_bicrystal']]):
+            msg = 'Cannot apply boundary vacuum to this supercell type.'
+            raise NotImplementedError(msg)
 
         # For convenience:
         vt = thickness
@@ -205,7 +203,7 @@ class Bicrystal(AtomisticStructure):
             }
             func_cll = mathsutils.linear
 
-        # Callable which will return dx for a given x
+        # Callable that returns dx for a given x
         f = partial(func_cll, **func_args)
 
         def expand_box(edge_vecs, box_origin):
