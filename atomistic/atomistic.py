@@ -52,13 +52,10 @@ class AtomisticStructureException(Exception):
 class AtomisticStructure(object):
     'Class to represent crystals of atoms'
 
-    # TODO:
-    # - store sites in sites dict attribute sites['atoms'] etc
-    # - fix methods that deal with `self.crystals` (must use Crystal methods)
-    # - fix method `tile_supercell` (`check_overlapping_atoms` will then work)
+    atoms = None
 
-    def __init__(self, supercell, sites, origin=None, crystals=None,
-                 crystal_structures=None, overlap_tol=1, tile=None):
+    def __init__(self, supercell, sites=None, origin=None, crystals=None, overlap_tol=1,
+                 tile=None):
         """Constructor method for AtomisticStructure object."""
 
         if origin is None:
@@ -67,15 +64,13 @@ class AtomisticStructure(object):
         if crystals is None:
             crystals = []
 
-        if crystal_structures is None:
-            crystal_structures = []
+        if sites is None:
+            sites = {}
 
         self.origin = origin
-        self._sites = self._init_sites(sites)
+        self._sites = self._init_sites(sites, crystals)
         self.supercell = supercell
         self.meta = {}
-        self.crystal_structures = CrystalStructure.init_crystal_structures(
-            crystal_structures)
         self.crystals = crystals
         self._overlap_tol = overlap_tol
 
@@ -85,24 +80,41 @@ class AtomisticStructure(object):
         if self.volume < 0:
             raise ValueError('Supercell does not form a right-handed coordinate system.')
 
-        # if tile:
-        #     self.tile_supercell(tile)
+        if tile:
+            self.tile(tile)
 
-    def _init_sites(self, sites):
+    def _init_sites(self, sites, crystals):
+        'Merge crystal-less sites with crystal sites and add attributes.'
 
-        allowed_sites = ['atoms', 'lattice_sites', 'interstices']
+        # Merge crystal sites:
+        all_sites = {}
+        if crystals:
+            for name in crystals[0].sites.keys():
+                combined = Sites.concatenate([i.sites[name] for i in crystals])
+                crystal_idx = np.concatenate([[idx] * len(i.sites[name])
+                                              for idx, i in enumerate(crystals)])
+                combined.add_labels(crystal_idx=crystal_idx)
+                all_sites.update({name: combined})
+            for i in crystals:
+                i.atomistic_structure = self
 
-        if 'atoms' not in sites:
-            raise ValueError('`sites` must contain a `Sites` object named "atoms".')
-
+        # Merge crystal-less sites:
         for name, sites_obj in sites.items():
             if not isinstance(sites_obj, Sites):
                 raise ValueError('`sites` must be a dict with `Sites` object values.')
-            if name not in allowed_sites:
-                raise ValueError('`sites` named "{}" not allowed.'.format(name))
+
+            if name in all_sites:
+                sites_obj_copy = sites_obj.copy()
+                crystal_idx = np.array([[-1] * len(sites_obj_copy)])
+                sites_obj_copy.add_labels(crystal_idx=crystal_idx)
+                all_sites[name] += sites_obj
+
+        # Add attributes:
+        for name, sites_obj in all_sites.items():
+            sites_obj.parent_visual_handlers.append(self.refresh_visual)
             setattr(self, name, sites_obj)
 
-        return sites
+        return all_sites
 
     def translate(self, shift):
         """
@@ -115,10 +127,10 @@ class AtomisticStructure(object):
         """
 
         shift = get_column_vector(shift)
-
         self.origin += shift
-        for i in self.sites:
-            i.translate(shift)
+
+        for i in self.sites.values():
+            i.filter(crystal_idx=-1).translate(shift)
 
         for crystal in self.crystals:
             crystal.translate(shift)
@@ -131,22 +143,22 @@ class AtomisticStructure(object):
         Parameters
         ----------
         rot_mat : ndarray of shape (3, 3)
-            Rotation matrix that pre-multiplies column vectors in order to 
+            Rotation matrix that pre-multiplies column vectors in order to
             rotate them about a particular axis and angle.
 
         """
 
         self.supercell = np.dot(rot_mat, self.supercell)
 
-        for i in self.sites:
-            i.rotate(rot_mat, centre=self.origin)
+        for i in self.sites.values():
+            i.filter(crystal_idx=-1).rotate(rot_mat, centre=self.origin)
 
         for crystal in self.crystals:
             crystal.rotate(rot_mat, centre=self.origin)
 
-    def show(self, **kwargs):
+    def get_visual(self, **kwargs):
         points = {k: v for k, v in self.sites.items()}
-        boxes = {'supercell': Box(edge_vectors=self.supercell)}
+        boxes = {'supercell': Box(edge_vectors=self.supercell, origin=self.origin)}
         for c_idx, c in enumerate(self.crystals):
             boxes.update({
                 'crystal {}'.format(c_idx): Box(edge_vectors=c.box_vecs, origin=c.origin)
@@ -164,29 +176,35 @@ class AtomisticStructure(object):
                 },
                 {
                     'label': 'species_order',
-                    'style': {
-                        'outline_colour': {
-                            0: 'red',
-                            1: 'green',
-                        }
-                    }
-                }
+                    'styles': {}
+                },
             ],
         }
+        if self.crystals:
+            group_points['atoms'].append({
+                'label': 'crystal_idx',
+                'styles': {},
+            })
         style_points = {
             'lattice_sites': {
                 'marker_symbol': 'cross',
-                'marker_colour': 'gray',
                 'marker_size': 5,
+                'fill_colour': 'gray',
             },
             'interstices': {
                 'marker_symbol': 'square-open',
-                'marker_colour': 'pink',
                 'marker_size': 4,
+                'fill_colour': 'pink',
             }
         }
         vis = gg.show(group_points=group_points, style_points=style_points)
         return vis
+
+    def show(self, **kwargs):
+        return self.get_visual(**kwargs)
+
+    def project(self):
+        pass
 
     def reorient_to_lammps(self):
         """
@@ -242,8 +260,8 @@ class AtomisticStructure(object):
         for name, i in self.sites.items():
             if sites == name or sites == 'all':
                 i.basis = self.supercell
-                i._coords[:, dirs] -= np.floor(i._coords[:, dirs])
-                i.basis = None
+                i._coords[dirs] -= np.floor(i._coords[dirs])
+                i.basis = None  # reset to standard basis
 
     @property
     def sites(self):
@@ -537,3 +555,7 @@ class AtomisticStructure(object):
                               self.supercell[:, 1]),
                      self.supercell[:, 2])
         return vol
+
+    def refresh_visual(self, obj):
+        # print('AS.refresh_visual invoked by object: {}'.format(obj))
+        pass
