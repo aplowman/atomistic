@@ -11,6 +11,52 @@ from atomistic.atomistic import AtomisticStructure
 from atomistic.crystal import CrystalBox
 
 
+def distance_from_origin(vecs, stretch_origin, stretch_direction):
+    # TODO: generalise this nomenclature further?
+    return np.einsum('jk,jl->k', vecs - stretch_origin, stretch_direction)
+
+
+def stretch_box(edge_vectors, box_origin, stretch_func, stretch_origin, stretch_direction):
+    """Stretch a box along a given direction.
+
+    Parameters
+    ----------
+    edge_vectors : ndarray of column vectors
+    box_origin : 3-vector
+    stretch_func : callable
+        Function that returns the change in coordinate for a given coordinate.
+    stretch_origin : 3-vector
+        Points at the `stretch_origin` are not modified.
+    stretch_direction 3-vector
+
+    Returns
+    -------
+    tuple of (vecs_stretch, org_stretch)
+
+    """
+
+    vecs_full = edge_vectors + box_origin
+    vecs_dist = distance_from_origin(vecs_full, stretch_origin, stretch_direction)
+    org_dist = distance_from_origin(box_origin, stretch_origin, stretch_direction)
+
+    vecs_dx = stretch_func(vecs_dist)
+    org_dx = stretch_func(org_dist)
+
+    org_stretch = box_origin + (org_dx * stretch_direction)
+    vecs_stretch = vecs_full + (vecs_dx * stretch_direction) - org_stretch
+
+    return (vecs_stretch, org_stretch)
+
+
+def stretch_sites(sites, stretch_func, stretch_origin, stretch_direction):
+    """
+    TODO: must `stretch_direction` be a unit vector?
+    """
+
+    dist = distance_from_origin(sites._coords, stretch_origin, stretch_direction)
+    sites += stretch_func(dist) * stretch_direction
+
+
 class Bicrystal(AtomisticStructure):
     """
     Class to represent a bicrystal supercell.
@@ -97,6 +143,8 @@ class Bicrystal(AtomisticStructure):
         Computes the distance from each in an array of column vector to the
         origin grain boundary plane.
 
+        # TODO: does this assume supercell origin is at (0,0,0)?
+
         """
         return np.einsum('jk,jl->k', points, self.n_unit)
 
@@ -171,12 +219,6 @@ class Bicrystal(AtomisticStructure):
         bt = self.bicrystal_thickness
         nu = self.n_unit
         uu = self.u_unit
-        grn_a = self.crystals[0]
-        grn_b = self.crystals[1]
-        grn_a_cry = grn_a['crystal']
-        grn_b_cry = grn_b['crystal']
-        grn_a_org = grn_a['origin']
-        grn_b_org = grn_b['origin']
 
         if func in ['sigmoid', 'flat']:
 
@@ -206,79 +248,36 @@ class Bicrystal(AtomisticStructure):
         # Callable that returns dx for a given x
         f = partial(func_cll, **func_args)
 
-        def expand_box(edge_vecs, box_origin):
+        stretch_params = {
+            'stretch_func': f,
+            'stretch_origin': self.origin,
+            'stretch_direction': self.n_unit,
+        }
 
-            vecs_full = edge_vecs + box_origin
-            vecs_dist = self.distance_from_gb(vecs_full - self.origin)
-            org_dist = self.distance_from_gb(box_origin - self.origin)
-
-            vecs_dx = f(vecs_dist)
-            org_dx = f(org_dist)
-
-            org_vac = box_origin + (org_dx * nu)
-            vecs_vac = vecs_full + (vecs_dx * nu) - org_vac
-
-            return (vecs_vac, org_vac)
-
-        def expand_sites(sites):
-
-            dist = self.distance_from_gb(sites - self.origin)
-            dx = f(dist)
-            sites_vac = sites + (dx * nu)
-
-            return (sites_vac, dist, dx)
-
-        atm_sts, atm_dst, atm_dx = expand_sites(self.atom_sites)
-        self.atom_sites = atm_sts
+        for sites in self.sites.values():
+            stretch_sites(sites, **stretch_params)
 
         # Store info in the meta dict regarding this change in site positions:
         bv_dict = {
             'thickness': vt,
             'func': func,
             'kwargs': kwargs,
-            'atom_sites': {
-                'x': atm_dst,
-                'dx': atm_dx,
-            }
         }
 
-        if self.lattice_sites is not None:
-            lat_sts, lat_dst, lat_dx = expand_sites(self.lattice_sites)
-            self.lattice_sites = lat_sts
-            bv_dict.update({
-                'lattice_sites': {
-                    'x': lat_dst,
-                    'dx': lat_dx,
-                }
-            })
-
-        if self.interstice_sites is not None:
-            int_sts, int_dst, int_dx = expand_sites(self.interstice_sites)
-            self.interstice_sites = int_sts
-            bv_dict.update({
-                'interstice_sites': {
-                    'x': int_dst,
-                    'dx': int_dx,
-                }
-            })
-
-        cry_keys = ('crystal', 'origin')
-        crys_a = dict(zip(cry_keys, expand_box(grn_a_cry, grn_a_org)))
-        crys_b = dict(zip(cry_keys, expand_box(grn_b_cry, grn_b_org)))
-
-        self.crystals[0].update(crys_a)
-        self.crystals[1].update(crys_b)
+        for crystal in self.crystals:
+            new_vecs, new_org = stretch_box(crystal.box_vecs, crystal.origin,
+                                            **stretch_params)
+            crystal.box_vecs = new_vecs
+            crystal.origin = new_org
 
         # Apply vacuum to the supercell
         if self.maintain_inv_sym:
-            self.supercell, _ = expand_box(self.supercell, self.origin)
+            new_vecs, _ = stretch_box(self.supercell, self.origin, **stretch_params)
+            self.supercell = new_vecs
 
         else:
             vac_add = (uu * vt) / np.einsum('ij,ij->', nu, uu)
-            sup_vac = np.copy(self.supercell)
-            nbi = self.non_boundary_idx
-            sup_vac[:, nbi:nbi + 1] += vac_add
-            self.supercell = sup_vac
+            self.supercell[:, self.non_boundary_idx, None] += vac_add
 
         # Add new meta information:
         bv_meta = self.meta.get('boundary_vac')
