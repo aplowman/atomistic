@@ -315,16 +315,8 @@ def surface_bicrystal_from_csl_vectors(crystal_structure, csl_vecs,
     bicrys = bicrystal_from_csl_vectors(**bc_params)
 
     # Remove atoms from removed crystal
-    atoms_keep = np.where(bicrys.crystal_idx == surface_idx)[0]
-    bicrys.atom_sites = bicrys.atom_sites[:, atoms_keep]
-    bicrys.species_idx = bicrys.species_idx[atoms_keep]
-    bicrys.motif_idx = bicrys.motif_idx[atoms_keep]
-    bicrys.crystal_idx = bicrys.crystal_idx[atoms_keep]
-
-    # Remove lattice sites from removed crystal
-    lat_keep = np.where(bicrys.lat_crystal_idx == surface_idx)[0]
-    bicrys.lattice_sites = bicrys.lattice_sites[:, lat_keep]
-    bicrys.lat_crystal_idx = bicrys.lat_crystal_idx[lat_keep]
+    for sites in bicrys.sites.values():
+        sites.remove(crystal_idx=surface_idx)
 
     bicrys.meta['supercell_type'] = ['surface', 'surface_bicrystal']
     return bicrys
