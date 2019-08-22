@@ -33,11 +33,9 @@ CSL_FROM_PARAMS_GB_TYPES = {
 
 
 def bicrystal_from_csl_vectors(crystal_structure, csl_vecs, box_csl=None,
-                               gb_type=None, gb_size=None,
-                               edge_conditions=None,
-                               overlap_tol=1, reorient=True, wrap=True,
-                               maintain_inv_sym=False,
-                               boundary_vac=None,
+                               gb_type=None, gb_size=None, edge_conditions=None,
+                               overlap_tol=None, reorient=True, wrap=True,
+                               maintain_inv_sym=False, boundary_vac=None,
                                relative_shift=None):
     """
     Parameters
@@ -235,7 +233,6 @@ def bicrystal_from_csl_vectors(crystal_structure, csl_vecs, box_csl=None,
     as_params = {
         'supercell': sup_std,
         'crystals': [crys_a, crys_b],
-        'overlap_tol': overlap_tol,
     }
 
     # Bicrystal parameters
@@ -248,6 +245,7 @@ def bicrystal_from_csl_vectors(crystal_structure, csl_vecs, box_csl=None,
         'wrap': wrap,
         'non_boundary_idx': 2,
         'rot_mat': rot_mat,
+        'overlap_tol': overlap_tol,
     }
 
     return Bicrystal(**bc_params)
@@ -304,7 +302,6 @@ def surface_bicrystal_from_csl_vectors(crystal_structure, csl_vecs,
         'gb_type': gb_type,
         'gb_size': gb_size,
         'edge_conditions': edge_conditions,
-        'overlap_tol': overlap_tol,
         'reorient': reorient,
         'wrap': wrap,
         'maintain_inv_sym': maintain_inv_sym,
@@ -317,6 +314,9 @@ def surface_bicrystal_from_csl_vectors(crystal_structure, csl_vecs,
     # Remove atoms from removed crystal
     for sites in bicrys.sites.values():
         sites.remove(crystal_idx=(1 - surface_idx))
+
+    # Now do overlap check:
+    bicrys.check_overlapping_atoms(overlap_tol)
 
     bicrys.meta['supercell_type'] = ['surface', 'surface_bicrystal']
     return bicrys

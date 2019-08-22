@@ -71,8 +71,8 @@ class Bicrystal(AtomisticStructure):
     """
 
     def __init__(self, as_params=None, maintain_inv_sym=False, reorient=False,
-                 boundary_vac=None, relative_shift=None,
-                 wrap=True, non_boundary_idx=None, rot_mat=None):
+                 boundary_vac=None, relative_shift=None, wrap=True, non_boundary_idx=None,
+                 rot_mat=None, overlap_tol=1):
 
         # Call parent constructor
         super().__init__(**as_params)
@@ -117,6 +117,10 @@ class Bicrystal(AtomisticStructure):
 
         if wrap:
             self.wrap_sites_to_supercell()
+
+        if overlap_tol:
+            # Delay overlap check until after relative shift and boundary vac application.
+            self.check_overlapping_atoms(overlap_tol)
 
     @property
     def bicrystal_thickness(self):

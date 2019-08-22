@@ -54,8 +54,8 @@ class AtomisticStructure(object):
 
     atoms = None
 
-    def __init__(self, supercell, sites=None, origin=None, crystals=None, overlap_tol=1,
-                 tile=None):
+    def __init__(self, supercell, sites=None, origin=None, crystals=None,
+                 overlap_tol=None, tile=None):
         """Constructor method for AtomisticStructure object."""
 
         if origin is None:
@@ -72,9 +72,9 @@ class AtomisticStructure(object):
         self.supercell = supercell
         self.meta = {}
         self.crystals = crystals
-        self._overlap_tol = overlap_tol
 
-        self.check_overlapping_atoms(overlap_tol)
+        if overlap_tol:
+            self.check_overlapping_atoms(overlap_tol)
 
         # Check handedness:
         if self.volume < 0:
@@ -433,16 +433,14 @@ class AtomisticStructure(object):
         dist_sq = get_vec_squared_distances(atoms)
         return dist_sq
 
-    def check_overlapping_atoms(self, tol=None):
+    def check_overlapping_atoms(self, tol=1):
         """
         Checks if any atoms are overlapping within a tolerance.
 
         Parameters
         ----------
-        tol : float, optional
-            Distance below which atoms are considered to be overlapping. By,
-            default uses the value assigned on object initialisation as
-            `_overlap_tol`.
+        tol : float
+            Distance below which atoms are considered to be overlapping.
 
         Raises
         ------
@@ -450,14 +448,11 @@ class AtomisticStructure(object):
             If any atoms are found to overlap within `tol`.
 
         """
-        if tol is None:
-            tol = self._overlap_tol
 
         dist_sq = self.get_squared_interatomic_dist()
         if np.any(dist_sq < tol**2):
             min_dist = np.sqrt(np.min(dist_sq))
-            msg = ('Found overlapping atoms. Minimum '
-                   'separation: {:.3f}'.format(min_dist))
+            msg = 'Found overlapping atoms. Minimum separation: {:.3f}'.format(min_dist)
             raise AtomisticStructureException(msg)
 
     def get_sym_ops(self):
