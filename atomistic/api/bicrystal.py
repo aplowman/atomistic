@@ -316,7 +316,7 @@ def surface_bicrystal_from_csl_vectors(crystal_structure, csl_vecs,
 
     # Remove atoms from removed crystal
     for sites in bicrys.sites.values():
-        sites.remove(crystal_idx=surface_idx)
+        sites.remove(crystal_idx=(1 - surface_idx))
 
     bicrys.meta['supercell_type'] = ['surface', 'surface_bicrystal']
     return bicrys
