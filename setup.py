@@ -54,7 +54,7 @@ setup(
     },
     install_requires=[
         'numpy',
-        'plotly',
+        'gemo',
         'vecmaths',
         'bravais',
         'mendeleev',
