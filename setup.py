@@ -65,7 +65,7 @@ setup(
         'Github': 'https://github.com/aplowman/atomistic',
     },
     classifiers=[
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
         'Topic :: Scientific/Engineering',
         'Programming Language :: Python :: 3.5',

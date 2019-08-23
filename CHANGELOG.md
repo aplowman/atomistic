@@ -1,5 +1,12 @@
 # Change Log
 
+## [0.2.0] - 2019.08.23
+
+### Changed
+
+- Use `Sites` from package `spatial-sites` to represent atoms and lattice sites etc. Changing development status to "4 - Beta".
+- Use package `gemo` for visualisations. Further refinement is necessary.
+
 ## [0.1.0] - 2019.06.04
 
 ### Added
