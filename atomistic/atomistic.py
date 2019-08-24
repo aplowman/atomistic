@@ -102,11 +102,14 @@ class AtomisticStructure(object):
             if not isinstance(sites_obj, Sites):
                 raise ValueError('`sites` must be a dict with `Sites` object values.')
 
+            sites_obj_copy = sites_obj.copy()
+            crystal_idx = np.array([[-1] * len(sites_obj_copy)])
+            sites_obj_copy.add_labels(crystal_idx=crystal_idx)
+
             if name in all_sites:
-                sites_obj_copy = sites_obj.copy()
-                crystal_idx = np.array([[-1] * len(sites_obj_copy)])
-                sites_obj_copy.add_labels(crystal_idx=crystal_idx)
-                all_sites[name] += sites_obj
+                all_sites[name] += sites_obj_copy
+            else:
+                all_sites.update({name: sites_obj_copy})
 
         # Add attributes:
         for name, sites_obj in all_sites.items():
@@ -173,12 +176,13 @@ class AtomisticStructure(object):
                         },
                     },
                 },
-                {
-                    'label': 'species_order',
-                    'styles': {}
-                },
             ],
         }
+        if 'species_order' in self.sites['atoms'].labels:
+            group_points['atoms'].append({
+                'label': 'species_order',
+                'styles': {}
+            })
         if self.crystals:
             group_points['atoms'].append({
                 'label': 'crystal_idx',
