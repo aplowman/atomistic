@@ -9,7 +9,6 @@ import spglib
 from vecmaths import rotation, geometry
 from gemo import GeometryGroup, Box, Sites
 
-from atomistic.visualise import visualise_structure
 from atomistic.utils import get_column_vector
 from atomistic.crystal import CrystalStructure
 

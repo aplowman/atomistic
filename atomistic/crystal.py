@@ -13,7 +13,6 @@ from spatial_sites.utils import repr_dict
 from gemo import GeometryGroup, Box
 
 from atomistic.utils import get_column_vector, check_indices
-from atomistic.visualise import visualise_structure
 
 REPR_INDENT = 4
 
