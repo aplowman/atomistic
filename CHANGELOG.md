@@ -1,5 +1,12 @@
 # Change Log
 
+## [0.2.1] - 2019.08.24
+
+### Fixed
+
+- Fixed bug in `AtomisticStructure._init_sites` where sites not associated with a crystal were not added.
+- Remove requirement in `AtomisticStructure.get_visual` that `atoms` must have label `species_order`.
+
 ## [0.2.0] - 2019.08.23
 
 ### Changed
