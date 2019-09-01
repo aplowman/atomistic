@@ -142,6 +142,11 @@ class Bicrystal(AtomisticStructure):
             self.supercell[:, self.boundary_idx[1]]
         ]).T
 
+    @property
+    def boundary_vecs_magnitude(self):
+        'Get the magnitudes of the boundary vectors.'
+        return np.linalg.norm(self.boundary_vecs, axis=0)
+
     def distance_from_gb(self, points):
         """
         Computes the distance from each in an array of column vector to the
