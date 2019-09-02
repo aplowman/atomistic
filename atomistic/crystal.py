@@ -504,6 +504,7 @@ class CrystalBox(Crystal):
         self.bounding_box = bounding_box
         self.crystal_structure = cs
         self.origin = np.zeros((3, 1))
+        self.edge_conditions = edge_conditions
 
         if origin is not None:
             self.translate(origin)
