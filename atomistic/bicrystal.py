@@ -2,6 +2,8 @@
 
 import warnings
 from functools import partial
+import fractions
+from pprint import pprint
 
 import spglib
 import numpy as np
@@ -9,6 +11,7 @@ import numpy as np
 from atomistic import mathsutils
 from atomistic.atomistic import AtomisticStructure
 from atomistic.crystal import CrystalBox
+from atomistic.utils import fractions_to_common_denom, zeropad
 
 
 def distance_from_origin(vecs, stretch_origin, stretch_direction):
@@ -415,3 +418,411 @@ class Bicrystal(AtomisticStructure):
         for chk, func in allowed_checks.items():
             if chk in checks_list:
                 func()
+
+
+class GammaSurface(object):
+
+    def __init__(self, base_structure, shifts, expansions, data=None, fitted_data=None):
+        """
+
+        Parameters
+        ----------
+        base_structure : Bicrystal
+        shifts : ndarray or list of shape (N, 2)
+        expansions : ndarray of list of shape (N,)
+
+        TODO: 
+            - fitting master gamma surface
+            - should be able to *load* fitted data as well to avoid needing to refit?
+
+        """
+
+        shifts, expansions, data = self._validate(shifts, expansions, data)
+        self.base_structure = self._validate_structure(base_structure)
+        self.shifts = shifts
+        self.expansions = expansions
+        self.data = data
+        self.fitted_data = self._validate_fitted_data(fitted_data)
+
+        self._absolute_shifts = None
+
+    def _validate_fitted_data(self, fitted_data):
+        if not fitted_data:
+            fitted_data = {}
+        return fitted_data
+
+    @classmethod
+    def from_json_file(cls, base_structure, path):
+        """Load a gamma surface from a base structure and a JSON file."""
+
+    @classmethod
+    def from_grid(cls, base_structure, grid, expansion=None):
+        """Generate a gamma surface from a base structure and a grid specification at a
+        given expansion.
+
+        Parameters
+        ----------
+        base_structure : Bicrystal
+        grid : list of length two
+            Number of relative shifts in each boundary vector direction.
+        expansion : number
+            Expansion for all shifts in the grid.
+
+        """
+
+        gamma_surface = cls(base_structure, None, None)
+        gamma_surface.add_grid(grid, expansion)
+
+        return gamma_surface
+
+    def add_grid(self, grid, expansion=0.0):
+        """Add a grid of shifts at a given expansion.
+
+        Parameters
+        ----------
+        grid : list of length two
+            Number of relative shifts in each boundary vector direction.
+        expansion : number, optional
+            Expansion for all shifts in the grid. By default, 0.
+
+        """
+
+        if self.data:
+            msg = 'Cannot currently add a grid to a gamma surface with existing `data`.'
+            raise NotImplementedError(msg)
+
+        x, y = np.meshgrid(*[np.arange(i + 1) / i for i in grid])
+        shifts = np.concatenate([x.reshape(-1, 1), y.reshape(-1, 1)], axis=1)
+        expansions = [expansion] * shifts.shape[0]
+        self.add_coordinates(shifts, expansions)
+
+    def add_coordinates(self, shifts, expansions, data=None):
+        """Add more coordinates to the gamma surface.
+
+        Parameters
+        ----------
+        shifts : ndarray or list of shape (N, 2)
+        expansions : ndarray of list of shape (N,)
+
+        """
+
+        shifts, expansions, data = self._validate(shifts, expansions, data)
+
+        self.expansions = np.append(self.expansions, expansions)
+        self.shifts = np.vstack([self.shifts, shifts])
+
+        if set(data.keys()) != set(self.data.keys()):
+            msg = 'New data names must match existing data names.'
+            raise ValueError(msg)
+
+        for data_name, data_item in data.items():
+            self.data[data_name] = np.concatenate(
+                [self.data[data_name], data_item], axis=0)
+
+    def to_dict(self):
+        pass
+
+    def to_json_file(self):
+        pass
+
+    @property
+    def shifts(self):
+        return self.shift_numerators / self.shift_denominators
+
+    @shifts.setter
+    def shifts(self, shifts):
+
+        if shifts.size:
+            shift_frac = np.array([[fractions.Fraction(i).limit_denominator()
+                                    for i in j] for j in shifts])
+
+            x_nums, x_denom = fractions_to_common_denom(shift_frac[:, 0])
+            y_nums, y_denom = fractions_to_common_denom(shift_frac[:, 1])
+
+            self._shift_numerators = np.hstack([x_nums[:, None], y_nums[:, None]])
+            self._shift_denominators = np.hstack([x_denom, y_denom])
+        else:
+            self._shift_numerators = np.empty((0, 2))
+            self._shift_denominators = np.empty((0, 2))
+
+    @property
+    def shift_numerators(self):
+        return self._shift_numerators
+
+    @property
+    def shift_denominators(self):
+        return self._shift_denominators
+
+    def _validate(self, shifts, expansions, data):
+
+        if shifts is None:
+            shifts = np.empty((0, 2))
+        if expansions is None:
+            expansions = np.empty((0, ))
+        if data is None:
+            data = {}
+
+        shifts = np.array(shifts)
+        expansions = np.array(expansions)
+
+        if shifts.ndim != 2 or shifts.shape[1] != 2:
+            msg = '`shifts` must have shape (N, 2), but has shape: {}'
+            raise ValueError(msg.format(shifts.shape))
+
+        if expansions.ndim != 1:
+            msg = '`expansions` must have shape (N,), but has shape: {}'
+            raise ValueError(msg.format(expansions.shape))
+
+        if shifts.shape[0] != expansions.shape[0]:
+            msg = ('`shifts` and `expansions` must have the same outer shape, but have '
+                   'shapes of {} and {}, respectively.')
+            raise ValueError(msg.format(shifts.shape, expansions.shape))
+
+        for data_name, data_item in data.items():
+            data[data_name] = np.array(data_item)
+            if data[data_name].shape[0] != shifts.shape[0]:
+                msg = ('Data named "{}" must have outer dimension of length {}, but has '
+                       'shape {}.')
+                raise ValueError(msg.format(data_name, shifts.shape[0]))
+
+        return shifts, expansions, data
+
+    def _validate_structure(self, structure):
+        if not isinstance(structure, Bicrystal):
+            raise ValueError('base_structure` must be a Bicrystal object.')
+        if structure.relative_shift != [0, 0]:
+            raise ValueError('`base_structure` must have no pre-existing relative shift.')
+        if structure.boundary_vac != 0:
+            msg = '`base_structure` must have no pre-existing boundary vacuum.'
+            raise ValueError(msg)
+        return structure
+
+    def __len__(self):
+        return self.shifts.shape[0]
+
+    @property
+    def absolute_shifts(self):
+        if self._absolute_shifts is None:
+            self._absolute_shifts = self.shifts * self.base_structure.boundary_vecs_magnitude
+        return self._absolute_shifts
+
+    def get_coordinates(self, shift=None, expansion=None):
+        # Search for coordinates with given shift and/or expansion
+        if shift is None and expansion is None:
+            msg = 'Specify at least one of `shift` and `expansion`.'
+            raise ValueError(msg)
+        # TODO
+
+    def get_coordinate(self, index):
+        'Get a coordinate by index.'
+        return GammaSurfaceCoordinate(self, index)
+
+    def all_coordinates(self):
+        'Generate all coordinates.'
+
+        for index in range(len(self)):
+            yield GammaSurfaceCoordinate(self, index)
+
+    def add_fit(self, data_name, fit_size, shift=None):
+        """
+
+        Parameters
+        ----------
+        data_name : str
+            Key in `data` to fit
+        fit_size : int
+            Number of expansion data points at each shift to include in the fit
+        shift : list or length 2
+            Do the fit for just a single shift.
+
+        """
+
+        if data_name not in self.data:
+            msg = 'Data name "{}" does not exists. Existing data names are: {}.'
+            raise ValueError(msg.format(data_name, list(self.data.keys())))
+
+        fit = {
+            'first_index': [],
+            'minimum': [],
+            'fit_in_range': [],
+            'fit_coefficients': [],
+        }
+
+        # Fit at each unique relative shift:
+        uniq, inverse = np.unique(self.shift_numerators, axis=0, return_inverse=True)
+        for uniq_idx, _ in enumerate(uniq):
+
+            idx = np.where(inverse == uniq_idx)[0]
+            if len(idx) < fit_size:
+                continue
+
+            fitted_data = self._fit_expansions(self.expansions[idx],
+                                               self.data[data_name][idx])
+
+            fit['first_index'].append(idx[0])
+            fit['minimum'].append(fitted_data['minimum'])
+            fit['fit_coefficients'].append(fitted_data['fit_coefficients'])
+            fit['fit_in_range'].append(fitted_data['fit_in_range'])
+
+        fit = {k: np.array(v) for k, v in fit.items()}
+
+        self.fitted_data.update({
+            data_name: fit
+        })
+
+    def _fit_expansions(self, expansions, data):
+        'Do quadratic fit on data with expansions.'
+
+        poly_coeff = np.polyfit(expansions, data, 2)
+        p1d = np.poly1d(poly_coeff)
+        grad = np.polyder(p1d)
+        min_exp = -grad[0] / grad[1]
+        min_dat = p1d(min_exp)
+
+        out = {
+            'minimum': [min_exp, min_dat],
+            'fit_coefficients': poly_coeff,
+            'fit_in_range': (min(expansions) < min_exp) and (min_exp < max(expansions)),
+        }
+
+        return out
+
+    def get_surface_grids(self, fractional=False, grid=True):
+
+        x, y = np.meshgrid(*[np.arange(i + 1) / i for i in self.shift_denominators])
+
+        if not fractional:
+            x *= self.base_structure.boundary_vecs_magnitude[0]
+            y *= self.base_structure.boundary_vecs_magnitude[1]
+
+        z = np.zeros_like(x) * np.nan
+
+        if not grid:
+            x = x[0]
+            y = y[:, 0]
+
+        return x, y, z
+
+    def get_fit_plot_data(self, data_name, shifts=None):
+        'Get data for plotting fits, optionally for a subset of shifts.'
+        pass
+
+    def get_surface_plot_data(self, data_name, expansion, fractional=False,
+                              xy_as_grid=True):
+
+        x, y, z = self.get_surface_grids(fractional, grid=xy_as_grid)
+
+        for coord in self.all_coordinates():
+            if np.isclose(coord.expansion, expansion):
+                z[tuple(coord.shift_numerator[::-1])] = self.data[data_name][coord.index]
+
+        out = {
+            'x': x,
+            'y': y,
+            'z': z,
+        }
+
+        return out
+
+    def get_xy_plot_data(self, fractional=False):
+
+        x, y, _ = self.get_surface_grids(fractional, grid=True)
+        out = {
+            'x': x.flatten(),
+            'y': y.flatten(),
+        }
+
+        return out
+
+    def get_fitted_surface_plot_data(self, data_name, expansion=False, fractional=False,
+                                     xy_as_grid=True):
+
+        x, y, z = self.get_surface_grids(fractional, grid=xy_as_grid)
+
+        fitted_data = self.fitted_data[data_name]
+        for idx, coord_idx in enumerate(fitted_data['first_index']):
+            coord = self.get_coordinate(coord_idx)
+            minimum = fitted_data['minimum'][idx]
+            z_idx = tuple(coord.shift_numerator[::-1])
+            z[z_idx] = minimum[0] if expansion else minimum[1]
+
+        out = {
+            'x': x,
+            'y': y,
+            'z': z,
+        }
+
+        return out
+
+
+class GammaSurfaceCoordinate(object):
+
+    def __init__(self, gamma_surface, index):
+
+        if index >= len(gamma_surface):
+            msg = ('No gamma surface coordinate exists with index: {}. Number of '
+                   'coordinates is: {}.')
+            raise ValueError(msg.format(index, len(gamma_surface)))
+
+        self.gamma_surface = gamma_surface
+        self.index = index
+        self._structure = None
+
+    @property
+    def shift(self):
+        return self.gamma_surface.shifts[self.index]
+
+    @property
+    def shift_numerator(self):
+        return self.gamma_surface.shift_numerators[self.index]
+
+    @property
+    def shift_denominator(self):
+        return self.gamma_surface.shift_denominator[self.index]
+
+    @property
+    def expansion(self):
+        return self.gamma_surface.expansions[self.index]
+
+    @property
+    def absolute_shift(self):
+        self.gamma_surface.absolute_shifts[self.index]
+
+    @property
+    def data(self):
+        return {k: v[self.index] for k, v in self.gamma_surface.data.items()}
+
+    @property
+    def structure(self):
+        if not self._structure:
+            structure = copy.deepcopy(self.gamma_surface.base_structure)
+            structure.apply_relative_shift(self.gamma_surface.shifts[self.index], 0)
+            structure.apply_boundary_vac(
+                self.gamma_surface.expansions[self.index], 'sigmoid')
+            self._structure = structure
+        return self._structure
+
+    @property
+    def shift_fmt(self):
+        all_nums = self.gamma_surface.shift_numerators
+        max_nums = np.max(all_nums, axis=0)
+        nums = [zeropad(i, j) for i, j in zip(all_nums[self.index], max_nums)]
+        denoms = self.gamma_surface.shift_denominators
+        out = '{0:}.{2:}_{1:}.{3:}'.format(*nums, *denoms)
+        return out
+
+    @property
+    def expansion_fmt(self):
+        return '{.2f}'.format(self.expansion)
+
+    def __repr__(self):
+        out = '{}(shift={!r}, expansion={!r}'.format(
+            self.__class__.__name__,
+            self.shift,
+            self.expansion,
+        )
+        for k, v in self.data.items():
+            out += ', {}={!r}'.format(k, v)
+        out += ')'
+
+        return out

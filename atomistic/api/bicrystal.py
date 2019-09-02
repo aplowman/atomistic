@@ -1,5 +1,7 @@
 """`atomistic.api.bicrystal.py`"""
 
+import copy
+
 import numpy as np
 from vecmaths.vectors import vecpair_angle
 from vecmaths.rotation import axang2rotmat
@@ -7,6 +9,7 @@ from vecmaths.rotation import axang2rotmat
 from atomistic.atomistic import AtomisticStructure
 from atomistic.bicrystal import Bicrystal
 from atomistic.crystal import CrystalBox, CrystalStructure
+
 
 CSL_FROM_PARAMS_GB_TYPES = {
     'tilt_A': np.array([
@@ -320,7 +323,3 @@ def surface_bicrystal_from_csl_vectors(crystal_structure, csl_vecs,
 
     bicrys.meta['supercell_type'] = ['surface', 'surface_bicrystal']
     return bicrys
-
-
-def set_up_gamma_surface(base_bicrystal, translations):
-    """Generate"""
