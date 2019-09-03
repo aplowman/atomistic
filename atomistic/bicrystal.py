@@ -446,6 +446,36 @@ class GammaSurface(object):
 
         self._absolute_shifts = None
 
+    def __eq__(self, other):
+
+        if isinstance(other, self.__class__):
+            if not np.allclose(self.shifts, other.shifts):
+                return False
+            if not np.allclose(self.expansions, other.expansions):
+                return False
+
+            if set(self.data.keys()) != set(other.data.keys()):
+                return False
+
+            for k, v in self.data.items():
+                if not np.allclose(v, other.data[k]):
+                    return False
+
+            if set(self.fitted_data.keys()) != set(other.fitted_data.keys()):
+                return False
+
+            for k, v in self.fitted_data.items():
+                if set(v.keys()) != set(other.fitted_data[k].keys()):
+                    return False
+                for fit_key, fit_val in v.items():
+                    if not np.allclose(fit_val, other.fitted_data[k][fit_key]):
+                        return False
+
+            return True
+
+        else:
+            return NotImplemented
+
     def _validate_fitted_data(self, fitted_data):
         if not fitted_data:
             fitted_data = {}
