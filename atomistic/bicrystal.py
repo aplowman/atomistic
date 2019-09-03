@@ -456,7 +456,7 @@ class GammaSurface(object):
         """Load a gamma surface from a base structure and a JSON file."""
 
     @classmethod
-    def from_grid(cls, base_structure, grid, expansion=None):
+    def from_grid(cls, base_structure, grid, expansion=0):
         """Generate a gamma surface from a base structure and a grid specification at a
         given expansion.
 
@@ -475,7 +475,7 @@ class GammaSurface(object):
 
         return gamma_surface
 
-    def add_grid(self, grid, expansion=0.0):
+    def add_grid(self, grid, expansion=0):
         """Add a grid of shifts at a given expansion.
 
         Parameters
