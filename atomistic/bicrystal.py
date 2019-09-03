@@ -430,12 +430,18 @@ class GammaSurface(object):
         Parameters
         ----------
         base_structure : Bicrystal
+            Base bicrystal whose gamma surface is to be (or was) investigated.
         shifts : ndarray or list of shape (N, 2)
+            The set of relative shifts to apply in the directions parallel to the boundary
+            vectors of `base_structure`.
         expansions : ndarray of list of shape (N,)
-
-        TODO: 
-            - fitting master gamma surface
-            - should be able to *load* fitted data as well to avoid needing to refit?
+            The set of expansions to apply in the out-of-boundary direction of
+            `base_structure`.
+        data : dict, optional
+            Dict whose keys are strings and labels are ndarrays of outer dimension (N, )
+        fitted_data : dict, optional
+            Dict whose keys are strings that must exist in `data`, and whose values are
+            sub-dicts whose keys are strings and whose values are ndarrays.
 
         """
 
