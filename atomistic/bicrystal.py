@@ -1,9 +1,11 @@
 """`atomistic.bicrystal.py`"""
 
 import warnings
-from functools import partial
 import fractions
+import json
+from functools import partial
 from pprint import pprint
+from pathlib import Path
 
 import spglib
 import numpy as np
@@ -479,11 +481,34 @@ class GammaSurface(object):
     def _validate_fitted_data(self, fitted_data):
         if not fitted_data:
             fitted_data = {}
+
+        for k, v in fitted_data.items():
+            # Check keys:
+            if k not in self.data:
+                msg = 'Fitted data key "{}" is not in data.'
+                raise ValueError(msg.format(k))
+
+            # Check sub dict values have consistent lengths and cast to ndarray
+            length = None
+            for fit_key, fit_val in v.items():
+                v[fit_key] = np.array(fit_val)
+                if length is None:
+                    length = v[fit_key].shape[0]
+                elif v[fit_key].shape[0] != length:
+                    msg = ('Fit key "{}" of fitted data "{}" does not have the same '
+                           'outer shape as its neighbouring keys.')
+                    raise ValueError(msg)
+
         return fitted_data
 
     @classmethod
     def from_json_file(cls, base_structure, path):
         """Load a gamma surface from a base structure and a JSON file."""
+
+        with Path(path).open() as handle:
+            contents = json.load(handle)
+
+        return cls(base_structure, **contents)
 
     @classmethod
     def from_grid(cls, base_structure, grid, expansion=0):
@@ -550,10 +575,22 @@ class GammaSurface(object):
                 [self.data[data_name], data_item], axis=0)
 
     def to_dict(self):
-        pass
+        'Generate a JSON-compatible dict of this GammaSurface (except the structure).'
+        out = {
+            'shifts': self.shifts.tolist(),
+            'expansions': self.expansions.tolist(),
+            'data': {k: v.tolist() for k, v in self.data.items()},
+            'fitted_data': {
+                k: {fit_key: fit_val.tolist() for fit_key, fit_val in v.items()}
+                for k, v in self.fitted_data.items()},
+        }
+        return out
 
-    def to_json_file(self):
-        pass
+    def to_json_file(self, path):
+        'Generate a JSON file of this GammaSurface (except the structure).'
+        dct = self.to_dict()
+        with Path(path).open('w') as handle:
+            json.dump(dct, handle, indent=4, sort_keys=True)
 
     @property
     def shifts(self):
