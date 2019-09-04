@@ -3,6 +3,7 @@
 import warnings
 import fractions
 import json
+import copy
 from functools import partial
 from pprint import pprint
 from pathlib import Path
@@ -517,7 +518,7 @@ class GammaSurface(object):
         return cls(base_structure, **contents)
 
     @classmethod
-    def from_grid(cls, base_structure, grid, expansion=0):
+    def from_grid(cls, base_structure, grid, expansions=0):
         """Generate a gamma surface from a base structure and a grid specification at a
         given expansion.
 
@@ -526,25 +527,29 @@ class GammaSurface(object):
         base_structure : Bicrystal
         grid : list of length two
             Number of relative shifts in each boundary vector direction.
-        expansion : number
-            Expansion for all shifts in the grid.
+        expansions : number or (list or ndarray) of numbers, optional
+            Expansion(s) for all shifts in the grid. By default, 0, meaning a single grid
+            is added. If a list or ndarray is supplied, multiple grids are added, one for
+            each expansion value.
 
         """
 
         gamma_surface = cls(base_structure, None, None)
-        gamma_surface.add_grid(grid, expansion)
+        gamma_surface.add_grid(grid, expansions)
 
         return gamma_surface
 
-    def add_grid(self, grid, expansion=0):
+    def add_grid(self, grid, expansions=0):
         """Add a grid of shifts at a given expansion.
 
         Parameters
         ----------
         grid : list of length two
             Number of relative shifts in each boundary vector direction.
-        expansion : number, optional
-            Expansion for all shifts in the grid. By default, 0.
+        expansions : number or (list or ndarray) of numbers, optional
+            Expansion(s) for all shifts in the grid. By default, 0, meaning a single grid
+            is added. If a list or ndarray is supplied, multiple grids are added, one for
+            each expansion value.
 
         """
 
@@ -552,10 +557,16 @@ class GammaSurface(object):
             msg = 'Cannot currently add a grid to a gamma surface with existing `data`.'
             raise NotImplementedError(msg)
 
+        try:
+            _ = iter(expansions)
+        except TypeError:
+            expansions = [expansions]
+
         x, y = np.meshgrid(*[np.arange(i + 1) / i for i in grid])
         shifts = np.concatenate([x.reshape(-1, 1), y.reshape(-1, 1)], axis=1)
-        expansions = [expansion] * shifts.shape[0]
-        self.add_coordinates(shifts, expansions)
+
+        for i in expansions:
+            self.add_coordinates(shifts, [i] * shifts.shape[0])
 
     def add_coordinates(self, shifts, expansions, data=None):
         """Add more coordinates to the gamma surface.
