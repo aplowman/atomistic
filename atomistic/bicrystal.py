@@ -847,9 +847,68 @@ class GammaSurface(object):
 
         return x, y, z
 
-    def get_fit_plot_data(self, data_name, shifts=None):
-        'Get data for plotting fits, optionally for a subset of shifts.'
-        pass
+    def get_fit_plot_data(self, data_name, shift, exp_range=None):
+        """Get data for plotting fits for a given shifts.
+
+        Returns
+        -------
+        list of dict
+            A list of three dicts are returned. They contain the x and y coordinates for
+            the, respectively, the following plot traces:
+                - The discrete data that has been fitted
+                - A 
+        """
+
+        coords = self.get_coordinates(shift=shift)
+        coords_srt = sorted(coords, key=lambda x: x.expansion)
+        dat_x = [i.expansion for i in coords_srt]
+        dat_y = [i.data[data_name] for i in coords_srt]
+        fitting_dat = {
+            'x': dat_x,
+            'y': dat_y,
+        }
+
+        if not exp_range:
+            dat_x_range = max(dat_x) - min(dat_x)
+            exp_range = [
+                min(dat_x) - 0.1 * dat_x_range,
+                max(dat_x) + 0.1 * dat_x_range,
+            ]
+
+        fit_data = self.get_fit_data(data_name, shift)
+        p1d = np.poly1d(fit_data['fit_coefficients'])
+        fit_dat_x = np.linspace(*exp_range)
+        fit_dat_y = p1d(fit_dat_x)
+        fitted_curve = {
+            'x': fit_dat_x,
+            'y': fit_dat_y,
+        }
+
+        minimum_dat = {
+            'x': [fit_data['minimum'][0]],
+            'y': [fit_data['minimum'][1]],
+        }
+
+        out = {
+            'data': fitting_dat,
+            'fitted_data': fitted_curve,
+            'minimum': minimum_dat,
+        }
+
+        return out
+
+    def get_fit_data(self, data_name, shift):
+        'Get fit data for a given shift.'
+
+        fitted_data = self.fitted_data[data_name]
+        first_idx = sorted(self.get_shift_idx(shift))[0]
+        fit_idx = np.where(fitted_data['first_index'] == first_idx)[0]
+        out = {
+            'fit_coefficients': fitted_data['fit_coefficients'][fit_idx][0],
+            'fit_in_range': fitted_data['fit_in_range'][fit_idx][0],
+            'minimum': fitted_data['minimum'][fit_idx][0],
+        }
+        return out
 
     def get_surface_plot_data(self, data_name, expansion, fractional=False,
                               xy_as_grid=True):
