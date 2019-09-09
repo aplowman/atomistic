@@ -609,6 +609,8 @@ class GammaSurface(object):
         with Path(path).open('w') as handle:
             json.dump(dct, handle, indent=4, sort_keys=True)
 
+        return path
+
     @property
     def shifts(self):
         return self.shift_numerators / self.shift_denominators
