@@ -627,9 +627,17 @@ class GammaSurface(object):
 
             self._shift_numerators = np.hstack([x_nums[:, None], y_nums[:, None]])
             self._shift_denominators = np.hstack([x_denom, y_denom])
+
+            uniq, inverse = np.unique(self.shift_numerators, axis=0, return_inverse=True)
+            self._unique_shift_numerators = {
+                tuple(shift): np.where(inverse == idx)[0]
+                for idx, shift in enumerate(uniq)
+            }
+
         else:
             self._shift_numerators = np.empty((0, 2))
             self._shift_denominators = np.empty((0, 2))
+            self._unique_shift_numerators = {}
 
     @property
     def shift_numerators(self):
@@ -638,6 +646,45 @@ class GammaSurface(object):
     @property
     def shift_denominators(self):
         return self._shift_denominators
+
+    @property
+    def unique_shift_numerators(self):
+        'Get a dict of unique shifts numerators and their indices.'
+        return self._unique_shift_numerators
+
+    def get_shift_idx(self, shift):
+        'Get the indices of coordinates that have a given shift.'
+
+        shift = np.array(shift).squeeze().tolist()
+        err_msg = ('Shift {} does not exist in this gamma surface.')
+
+        # Get the numerators of the shift (given the grid denominator)
+        shift_nums = []
+        for i_idx, i in enumerate(shift):
+            i_frac = fractions.Fraction(i).limit_denominator()
+            if self.shift_denominators[i_idx] % i_frac.denominator != 0:
+                raise ValueError(err_msg.format(shift))
+            factor = int(self.shift_denominators[i_idx] / i_frac.denominator)
+            numerator = i_frac.numerator * factor
+            shift_nums.append(numerator)
+
+        # Get the indices of coordinates:
+        shift_tup = tuple(shift_nums)
+        try:
+            idx = self.unique_shift_numerators[shift_tup]
+            return idx
+        except IndexError:
+            raise ValueError(err_msg)
+
+    def get_expansion_idx(self, expansion):
+        'Get the indices of coordinates that have a given expansion.'
+
+        idx = np.where(np.isclose(self.expansions, expansion))[0]
+        if not idx.size:
+            msg = 'No coordinates with expansion close to {}.'.format(expansion)
+            raise ValueError(msg)
+
+        return idx
 
     def _validate(self, shifts, expansions, data):
 
@@ -693,13 +740,24 @@ class GammaSurface(object):
         return self._absolute_shifts
 
     def get_coordinates(self, shift=None, expansion=None):
-        # Search for coordinates with given shift and/or expansion
+        'Get coordinates with a given shift and/or expansion.'
+
         if shift is None and expansion is None:
             msg = 'Specify at least one of `shift` and `expansion`.'
             raise ValueError(msg)
-        # TODO
 
-    def get_coordinate(self, index):
+        if shift:
+            idx = self.get_shift_idx(shift)
+            if expansion is not None:
+                idx = np.intersect1d(idx, self.get_expansion_idx(expansion))
+        elif expansion is not None:
+            idx = self.get_expansion_idx(expansion)
+
+        coords = [self.get_coordinate_by_index(i) for i in idx]
+
+        return coords
+
+    def get_coordinate_by_index(self, index):
         'Get a coordinate by index.'
         return GammaSurfaceCoordinate(self, index)
 
@@ -798,9 +856,9 @@ class GammaSurface(object):
 
         x, y, z = self.get_surface_grids(fractional, grid=xy_as_grid)
 
-        for coord in self.all_coordinates():
-            if np.isclose(coord.expansion, expansion):
-                z[tuple(coord.shift_numerator[::-1])] = self.data[data_name][coord.index]
+        for idx in self.get_expansion_idx(expansion):
+            coord = self.get_coordinate_by_index(idx)
+            z[tuple(coord.shift_numerator[::-1])] = self.data[data_name][idx]
 
         out = {
             'x': x,
@@ -827,7 +885,7 @@ class GammaSurface(object):
 
         fitted_data = self.fitted_data[data_name]
         for idx, coord_idx in enumerate(fitted_data['first_index']):
-            coord = self.get_coordinate(coord_idx)
+            coord = self.get_coordinate_by_index(coord_idx)
             minimum = fitted_data['minimum'][idx]
             z_idx = tuple(coord.shift_numerator[::-1])
             z[z_idx] = minimum[0] if expansion else minimum[1]
