@@ -63,6 +63,20 @@ def stretch_sites(sites, stretch_func, stretch_origin, stretch_direction):
     sites += stretch_func(dist) * stretch_direction
 
 
+def requires_base_structure(func):
+    def wrapper(*args, **kwargs):
+        if isinstance(args[0], GammaSurfaceCoordinate):
+            gamma_surface = args[0].gamma_surface
+        else:
+            gamma_surface = args[0]
+        if not hasattr(gamma_surface, '_base_structure'):
+            msg = ('This method/property requires the `base_structure` attribute to be '
+                   'set on the `GammaSurface`.')
+            raise ValueError(msg)
+        return func(*args, **kwargs)
+    return wrapper
+
+
 class Bicrystal(AtomisticStructure):
     """
     Class to represent a bicrystal supercell.
@@ -447,7 +461,7 @@ class GammaSurface(object):
         """
 
         shifts, expansions, data = self._validate(shifts, expansions, data)
-        self.base_structure = self._validate_structure(base_structure)
+        self.base_structure = base_structure
         self.shifts = shifts
         self.expansions = expansions
         self.data = data
@@ -568,6 +582,14 @@ class GammaSurface(object):
         for i in expansions:
             self.add_coordinates(shifts, [i] * shifts.shape[0])
 
+    def add_coordinate(self, shift, expansion, data=None):
+        'Add a single coordinate to the gamma surface.'
+
+        if not data:
+            data = {}
+        data = {name: [val] for name, val in data.items()}
+        self.add_coordinates([shift], [expansion], data)
+
     def add_coordinates(self, shifts, expansions, data=None):
         """Add more coordinates to the gamma surface.
 
@@ -610,6 +632,16 @@ class GammaSurface(object):
             json.dump(dct, handle, indent=4, sort_keys=True)
 
         return path
+
+    @property
+    @requires_base_structure
+    def base_structure(self):
+        return self._base_structure
+
+    @base_structure.setter
+    def base_structure(self, base_structure):
+        if base_structure is not None:
+            self._base_structure = self._validate_structure(base_structure)
 
     @property
     def shifts(self):
@@ -734,6 +766,7 @@ class GammaSurface(object):
         return self.shifts.shape[0]
 
     @property
+    @requires_base_structure
     def absolute_shifts(self):
         if self._absolute_shifts is None:
             self._absolute_shifts = self.shifts * self.base_structure.boundary_vecs_magnitude
@@ -831,6 +864,7 @@ class GammaSurface(object):
 
         return out
 
+    @requires_base_structure
     def get_surface_grids(self, fractional=False, grid=True):
 
         x, y = np.meshgrid(*[np.arange(i + 1) / i for i in self.shift_denominators])
@@ -996,6 +1030,7 @@ class GammaSurfaceCoordinate(object):
         return {k: v[self.index] for k, v in self.gamma_surface.data.items()}
 
     @property
+    @requires_base_structure
     def structure(self):
         if not self._structure:
             structure = copy.deepcopy(self.gamma_surface.base_structure)
@@ -1016,7 +1051,11 @@ class GammaSurfaceCoordinate(object):
 
     @property
     def expansion_fmt(self):
-        return '{.2f}'.format(self.expansion)
+        return '{:+.3f}'.format(self.expansion)
+
+    @property
+    def coordinate_fmt(self):
+        return '{}__{}'.format(self.shift_fmt, self.expansion_fmt)
 
     def __repr__(self):
         out = '{}(shift={!r}, expansion={!r}'.format(
