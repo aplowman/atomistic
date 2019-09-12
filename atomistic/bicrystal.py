@@ -991,6 +991,14 @@ class GammaSurface(object):
 
         return out
 
+    def get_minimum_fitted_shift(self, data_name):
+
+        min_idx = np.argmin(self.fitted_data[data_name]['minimum'][:, 1])
+        first_idx = self.fitted_data[data_name]['first_index'][min_idx]
+        shift = self.shifts[first_idx]
+        coords = self.get_coordinates(shift=shift)
+        return coords
+
 
 class GammaSurfaceCoordinate(object):
 
