@@ -779,7 +779,7 @@ class GammaSurface(object):
             msg = 'Specify at least one of `shift` and `expansion`.'
             raise ValueError(msg)
 
-        if shift:
+        if shift is not None:
             idx = self.get_shift_idx(shift)
             if expansion is not None:
                 idx = np.intersect1d(idx, self.get_expansion_idx(expansion))
