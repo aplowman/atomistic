@@ -2,8 +2,10 @@
 
 from pathlib import Path
 
+from atomistic.utils import get_atom_species_jmol_colours
+
+
 PACKAGE_DIR = Path(__file__).parent
 DATA_DIR = PACKAGE_DIR.joinpath('data')
 
-print('DATA_DIR: {}'.format(DATA_DIR))
-print('is dir? {}'.format(DATA_DIR.is_dir()))
+ATOM_JMOL_COLOURS = get_atom_species_jmol_colours(DATA_DIR.joinpath('jmol_colours.txt'))

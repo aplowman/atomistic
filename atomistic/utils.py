@@ -144,3 +144,17 @@ def zeropad(num, largest):
     padded = '{0:0{width}}'.format(num, width=num_digits)
 
     return padded
+
+
+def get_atom_species_jmol_colours(jmol_colours_path):
+    'Get RGB values of JMOL atom species colours.'
+    cols = {}
+    with jmol_colours_path.open() as handle:
+        for ln in handle:
+            ln_s = ln.strip()
+            _, species, rgb_str = ln_s.split()
+            rgb = [int(i) for i in rgb_str[1:-1].split(',')]
+            cols.update({
+                species: rgb
+            })
+    return cols

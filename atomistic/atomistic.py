@@ -9,6 +9,7 @@ import spglib
 from vecmaths import rotation, geometry
 from gemo import GeometryGroup, Box, Sites
 
+from atomistic import ATOM_JMOL_COLOURS
 from atomistic.utils import get_column_vector
 from atomistic.crystal import CrystalStructure
 
@@ -166,13 +167,15 @@ class AtomisticStructure(object):
                 'crystal {}'.format(c_idx): Box(edge_vectors=c.box_vecs, origin=c.origin)
             })
         gg = GeometryGroup(points=points, boxes=boxes)
+        uniq_species = self.atoms.labels['species'].unique_values
         group_points = {
             'atoms': [
                 {
                     'label': 'species',
                     'styles': {
                         'fill_colour': {
-                            'Zr': 'blue',
+                            species: 'rgb({}, {}, {})'.format(*ATOM_JMOL_COLOURS[species])
+                            for species in uniq_species
                         },
                     },
                 },
