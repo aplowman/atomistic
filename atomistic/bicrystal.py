@@ -145,8 +145,7 @@ class Bicrystal(AtomisticStructure):
     @property
     def bicrystal_thickness(self):
         """Get bicrystal thickness in grain boundary normal direction."""
-        sup_nb = self.supercell[:, self.non_boundary_idx][:, None]
-        return np.einsum('ij,ij', sup_nb, self.n_unit)
+        return np.einsum('ij,ij', self.non_boundary_vec, self.n_unit)
 
     @property
     def boundary_area(self):
@@ -179,8 +178,8 @@ class Bicrystal(AtomisticStructure):
 
     def distance_from_gb(self, points):
         """
-        Computes the distance from each in an array of column vector to the
-        origin grain boundary plane.
+        Computes the distance from each in an array of column vector to the origin grain
+        boundary plane.
 
         # TODO: does this assume supercell origin is at (0,0,0)?
 
@@ -189,8 +188,8 @@ class Bicrystal(AtomisticStructure):
 
     def reorient_to_xy(self):
         """
-        Reorient the supercell to a LAMMPS-compatible orientation in such a
-        way that the boundary plane is in the xy plane.
+        Reorient the supercell to a LAMMPS-compatible orientation in such a way that the
+        boundary plane is in the xy plane.
 
         """
 
@@ -199,9 +198,7 @@ class Bicrystal(AtomisticStructure):
 
             # Ensure non-boundary supercell vector is last vector, whilst
             # maintaining handedness of the supercell coordinate system.
-            self.supercell = np.roll(self.supercell,
-                                     (2 - self.non_boundary_idx), axis=1)
-
+            self.supercell = np.roll(self.supercell, (2 - self.non_boundary_idx), axis=1)
             self.non_boundary_idx = 2
             self.boundary_idx = [0, 1]
 
@@ -347,20 +344,19 @@ class Bicrystal(AtomisticStructure):
 
     def apply_relative_shift(self, shift, crystal_idx, wrap=False):
         """
-        Apply in-boundary-plane shifts to the specified grain to enable an
-        exploration of the grain boundary's microscopic degrees of freedom.
+        Apply in-boundary-plane shifts to the specified grain to enable an exploration of
+        the grain boundary's microscopic degrees of freedom.
 
         Parameters
         ----------
         shift : ndarray of size two
-            A two-element array whose elements are the relative shift in of one
-            crystal relative to the other in fractional coordinates s of the
-            boundary area.
+            A two-element array whose elements are the relative shift in of one crystal
+            relative to the other in fractional coordinates of the boundary area.
         crystal_idx : int
             Which crystal to shift. Zero-indexed.
         wrap : bool, optional
-            If True, sites (atoms, lattice sites, etc) within the supercell are
-            wrapped to the supercell volume after shifting. By default, False. 
+            If True, sites (atoms, lattice sites, etc) within the supercell are wrapped to
+            the supercell volume after shifting. By default, False. 
 
         """
 
@@ -398,10 +394,8 @@ class Bicrystal(AtomisticStructure):
             self.wrap_sites_to_supercell()
 
     def wrap_sites_to_supercell(self, sites='all'):
-        """
-        Wrap atoms to within the boundary plane as defined by the supercell.
+        """Wrap atoms to within the boundary plane as defined by the supercell."""
 
-        """
         sup_type = self.meta['supercell_type']
 
         if 'bulk_bicrystal' in sup_type:
@@ -417,8 +411,8 @@ class Bicrystal(AtomisticStructure):
 
     def check_inv_symmetry(self):
         """
-        Check atoms exhibit inversion symmetry through the two crystal centres,
-        if `self.maintain_inv_sym` is True.
+        Check atoms exhibit inversion symmetry through the two crystal centres, if
+        `self.maintain_inv_sym` is True.
 
         """
 
@@ -445,6 +439,11 @@ class Bicrystal(AtomisticStructure):
         for chk, func in allowed_checks.items():
             if chk in checks_list:
                 func()
+
+    def swap_crystal_sites(self):
+        'Swap sites between crystals.'
+        self.crystals[0].translate(-self.non_boundary_vec / 2)
+        self.crystals[1].translate(self.non_boundary_vec / 2)
 
 
 class GammaSurface(object):
