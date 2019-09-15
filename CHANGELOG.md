@@ -1,5 +1,15 @@
 # Change Log
 
+## [0.3.0] - 2019.09.15
+
+### Added
+
+- New `GammaSurface` and `GammaSurfaceCoordinate` classes for generating, visualising and manipulating bicrystal gamma surfaces.
+
+### Changed
+
+- Atoms now use default JMOL colours in `AtomisticStructure` visualisation.
+
 ## [0.2.1] - 2019.08.24
 
 ### Fixed
