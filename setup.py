@@ -57,7 +57,7 @@ setup(
         'gemo',
         'vecmaths',
         'bravais',
-        'mendeleev',
+        'mendeleev==0.4.5',
         'spglib',
         'beautifultable',
     ],
