@@ -10,8 +10,9 @@ from pathlib import Path
 
 import spglib
 import numpy as np
+from spatial_sites import Sites
 
-from atomistic import mathsutils
+from atomistic import mathsutils, TT_SUPERCELL_TYPE
 from atomistic.atomistic import AtomisticStructure
 from atomistic.crystal import CrystalBox
 from atomistic.utils import fractions_to_common_denom, zeropad
@@ -142,6 +143,68 @@ class Bicrystal(AtomisticStructure):
             # Delay overlap check until after relative shift and boundary vac application.
             self.check_overlapping_atoms(overlap_tol)
 
+    @classmethod
+    def from_atoms(cls, atoms, species, supercell, **kwargs):
+        """Generate a Bicrystal from atoms and a supercell definition by assuming the two
+        crystals are of equal size."""
+
+        if 'non_boundary_idx' not in kwargs:
+            msg = ('Specify which column of the supercell represents the out-of-boundary'
+                   ' direction using the `non_boundary_idx` argument.')
+            raise ValueError(msg)
+
+        non_boundary_idx = kwargs['non_boundary_idx']
+
+        crystal_1_box = np.copy(supercell)
+        crystal_1_box[:, non_boundary_idx] /= -2
+
+        # Generate crystal 0 at the "top".
+        crystal_0_box = np.copy(supercell)
+        crystal_0_box[:, non_boundary_idx] /= +2
+
+        origin = np.copy(crystal_0_box[:, non_boundary_idx])
+
+        atoms_sup = np.linalg.inv(supercell) @ atoms
+        atoms_0_idx = np.where(atoms_sup[non_boundary_idx] >= 0.5)[0]
+        atoms_1_idx = np.where(atoms_sup[non_boundary_idx] < 0.5)[0]
+
+        sites_0 = {
+            'atoms': Sites(
+                coords=atoms[:, atoms_0_idx],
+                vector_direction='col',
+                labels={
+                    'species': species[atoms_0_idx],
+                },
+            ),
+        }
+        sites_1 = {
+            'atoms': Sites(
+                coords=atoms[:, atoms_1_idx],
+                vector_direction='col',
+                labels={
+                    'species': species[atoms_1_idx],
+                },
+            ),
+        }
+
+        crystal_0 = CrystalBox(
+            box_vecs=crystal_0_box,
+            sites=sites_0,
+            origin=origin,
+        )
+        crystal_1 = CrystalBox(
+            box_vecs=crystal_1_box,
+            sites=sites_1,
+            origin=origin,
+        )
+
+        as_params = {
+            'supercell': supercell,
+            'crystals': [crystal_0, crystal_1],
+        }
+
+        return cls(as_params, **kwargs)
+
     @property
     def bicrystal_thickness(self):
         """Get bicrystal thickness in grain boundary normal direction."""
@@ -242,12 +305,8 @@ class Bicrystal(AtomisticStructure):
 
         sup_type = self.meta['supercell_type']
 
-        if 'bulk_bicrystal' in sup_type:
+        if 'bulk_bicrystal' in sup_type and TT_SUPERCELL_TYPE not in sup_type:
             msg = 'Cannot apply boundary vacuum to a bulk_bicrystal.'
-            raise NotImplementedError(msg)
-
-        elif all([i not in sup_type for i in ['bicrystal', 'surface_bicrystal']]):
-            msg = 'Cannot apply boundary vacuum to this supercell type.'
             raise NotImplementedError(msg)
 
         # For convenience:
@@ -399,13 +458,11 @@ class Bicrystal(AtomisticStructure):
         sup_type = self.meta['supercell_type']
 
         if 'bulk_bicrystal' in sup_type:
-            raise NotImplementedError(
-                'Cannot wrap atoms within a bulk_bicrystal.')
+            raise NotImplementedError('Cannot wrap atoms within a bulk_bicrystal.')
 
         elif all([i not in sup_type for i in ['bicrystal',
                                               'surface_bicrystal']]):
-            raise NotImplementedError(
-                'Cannot wrap atoms within this supercell type.')
+            raise NotImplementedError('Cannot wrap atoms within this supercell type.')
 
         super().wrap_sites_to_supercell(sites=sites, dirs=self.boundary_idx)
 
@@ -896,6 +953,7 @@ class GammaSurface(object):
         Returns
         -------
         list of dict
+            TODO
             A list of three dicts are returned. They contain the x and y coordinates for
             the, respectively, the following plot traces:
                 - The discrete data that has been fitted
