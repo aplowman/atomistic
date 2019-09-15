@@ -393,7 +393,8 @@ class CrystalBox(Crystal):
         shift = get_column_vector(shift)
         super().translate(shift)
 
-        self.bounding_box['bound_box_origin'] += shift
+        if self.bounding_box is not None:
+            self.bounding_box['bound_box_origin'] += shift
 
     def rotate(self, rot_mat, centre=None):
         """
@@ -417,7 +418,7 @@ class CrystalBox(Crystal):
         #     rot_mat, self.bounding_box['bound_box'][0]) # TODO
 
     def __init__(self, crystal_structure=None, box_vecs=None, edge_conditions=None,
-                 origin=None):
+                 origin=None, sites=None):
         """
         Fill a parallelepiped with atoms belonging to a given crystal structure.
 
@@ -456,63 +457,117 @@ class CrystalBox(Crystal):
 
         """
 
-        if edge_conditions is None:
-            edge_conditions = ['10', '10', '10']
+        msg = ('Specify exactly one of: `crystal_structure` and `sites`.')
+        if crystal_structure is None and sites is None:
+            raise ValueError(msg)
+        if crystal_structure is not None and sites is not None:
+            raise ValueError(msg)
 
-        # Generate CrystalStructure if necessary:
-        cs = CrystalStructure.init_crystal_structures([crystal_structure])[0]
+        if crystal_structure:
 
-        # Get the bounding box of box_vecs whose vectors are parallel to the crystal
-        # lattice. Use padding to catch edge atoms which aren't on lattice sites:
-        bounding_box = get_bounding_box(
-            box_vecs,
-            bound_vecs=cs.lattice.unit_cell,
-            padding=1
-        )
-        bb_bv = bounding_box['bound_box_bv'][:, 0]
-        bb_org_bv = bounding_box['bound_box_origin_bv'][:, 0]
+            if edge_conditions is None:
+                edge_conditions = ['10', '10', '10']
 
-        # Get all lattice sites within the bounding box, as column vectors:
-        grid = [range(bb_org_bv[i], bb_org_bv[i] + bb_bv[i] + 1) for i in [0, 1, 2]]
-        unit_cell_origins = np.vstack(np.meshgrid(*grid)).reshape((3, -1))
+            # Generate CrystalStructure if necessary:
+            cs = CrystalStructure.init_crystal_structures([crystal_structure])[0]
 
-        origin_sites = Sites(coords=unit_cell_origins,
-                             vector_direction='col',
-                             basis=cs.atoms.basis)
+            # Get the bounding box of box_vecs whose vectors are parallel to the crystal
+            # lattice. Use padding to catch edge atoms which aren't on lattice sites:
+            bounding_box = get_bounding_box(
+                box_vecs,
+                bound_vecs=cs.lattice.unit_cell,
+                padding=1
+            )
+            bb_bv = bounding_box['bound_box_bv'][:, 0]
+            bb_org_bv = bounding_box['bound_box_origin_bv'][:, 0]
 
-        sites = {k: origin_sites.tile(v) for k, v in cs.sites.items()}
-        for i in sites.values():
+            # Get all lattice sites within the bounding box, as column vectors:
+            grid = [range(bb_org_bv[i], bb_org_bv[i] + bb_bv[i] + 1) for i in [0, 1, 2]]
+            unit_cell_origins = np.vstack(np.meshgrid(*grid)).reshape((3, -1))
 
-            i.basis = box_vecs
-            i.snap_coords([0, 1], tol=1e-14)
+            origin_sites = Sites(coords=unit_cell_origins,
+                                 vector_direction='col',
+                                 basis=cs.atoms.basis)
 
-            for j in range(3):
-                edge_con = edge_conditions[j]
-                remove_arr = np.zeros(len(i), dtype=bool)
-                if edge_con[0] == '0':
-                    remove_arr = np.logical_or(remove_arr, i._coords[j] <= 0)
-                elif edge_con[0] == '1':
-                    remove_arr = np.logical_or(remove_arr, i._coords[j] < 0)
-                if edge_con[1] == '0':
-                    remove_arr = np.logical_or(remove_arr, i._coords[j] >= 1)
-                elif edge_con[1] == '1':
-                    remove_arr = np.logical_or(remove_arr, i._coords[j] > 1)
-                i.remove(remove_arr)
+            sites = {k: origin_sites.tile(v) for k, v in cs.sites.items()}
+            for i in sites.values():
+
+                i.basis = box_vecs
+                i.snap_coords([0, 1], tol=1e-14)
+
+                for j in range(3):
+                    edge_con = edge_conditions[j]
+                    remove_arr = np.zeros(len(i), dtype=bool)
+                    if edge_con[0] == '0':
+                        remove_arr = np.logical_or(remove_arr, i._coords[j] <= 0)
+                    elif edge_con[0] == '1':
+                        remove_arr = np.logical_or(remove_arr, i._coords[j] < 0)
+                    if edge_con[1] == '0':
+                        remove_arr = np.logical_or(remove_arr, i._coords[j] >= 1)
+                    elif edge_con[1] == '1':
+                        remove_arr = np.logical_or(remove_arr, i._coords[j] > 1)
+                    i.remove(remove_arr)
+
+            origin = np.zeros((3, 1))
+
+        else:
+            bounding_box = None
+            cs = None
 
         self._sites = self._init_sites(sites)
         self.box_vecs = box_vecs
         self.bounding_box = bounding_box
         self.crystal_structure = cs
-        self.origin = np.zeros((3, 1))
+        self.origin = get_column_vector(origin)
         self.edge_conditions = edge_conditions
 
-        if origin is not None:
-            self.translate(origin)
+        if crystal_structure:
+            # Only translate sites if they were generated in the constructor.
+            if origin is not None:
+                self.translate(origin)
 
     def _init_sites(self, sites):
-        for name, sites_obj in sites.items():
-            setattr(self, name, sites_obj)
-        return sites
+
+        req_sites = ['atoms']
+        allowed_sites_labels = {
+            'atoms': ['species', 'species_order', 'bulk_coord_num', 'crystal_idx'],
+            'lattice_sites': ['crystal_idx'],
+            'interstices': ['bulk_name', 'is_occupied', 'crystal_idx'],
+        }
+
+        out = {}
+        for sites_name, sites_data in sites.items():
+
+            if sites_name in out:
+                msg = ('Multiple sites with the same name were found.')
+                raise ValueError(msg)
+
+            sites_obj = sites_data
+            if not isinstance(sites_obj, Sites):
+                sites_obj = Sites(coords=sites_data['coords'],
+                                  labels=sites_data['labels'])
+
+            if not sites_name in allowed_sites_labels:
+                msg = ('Site name "{}" is not a valid CrystalBox site name. '
+                       'Valid names are: {}')
+                raise ValueError(
+                    msg.format(sites_name, list(allowed_sites_labels.keys())))
+
+            for lab_name in sites_obj.labels:
+                if not lab_name in allowed_sites_labels[sites_name]:
+                    msg = ('Label name "{}" is not a valid label name for '
+                           'CrystalBox sites called "{}".')
+                    raise ValueError(msg.format(lab_name, sites_name))
+
+            setattr(self, sites_name, sites_obj)
+            out.update({sites_name: sites_obj})
+
+        for i in req_sites:
+            if i not in out:
+                msg = 'Sites with name "{}" must be specified for the CrystalBox'
+                raise ValueError(msg.format(i))
+
+        return out
 
     @property
     def centroid(self):
