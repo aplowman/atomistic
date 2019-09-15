@@ -5,6 +5,7 @@
 ### Added
 
 - New `GammaSurface` and `GammaSurfaceCoordinate` classes for generating, visualising and manipulating bicrystal gamma surfaces.
+- New `AtomisticTensileTest` and `AtomisticTensileTestCoordinate` classess for generating, visualising and manipulating atomistic tensile tests.
 
 ### Changed
 
