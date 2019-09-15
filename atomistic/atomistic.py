@@ -3,6 +3,7 @@
 import warnings
 from itertools import combinations
 import copy
+from pprint import pprint
 
 import numpy as np
 import mendeleev
@@ -187,53 +188,57 @@ class AtomisticStructure(object):
 
         return gg
 
-    def _get_default_visual_args(self):
-        uniq_species = self.atoms.labels['species'].unique_values
-        group_points = {
-            'atoms': [
-                {
-                    'label': 'species',
-                    'styles': {
-                        'fill_colour': {
-                            species: 'rgb({}, {}, {})'.format(*ATOM_JMOL_COLOURS[species])
-                            for species in uniq_species
+    def _set_default_visual_args(self, visual_args):
+        if 'group_points' not in visual_args:
+            uniq_species = self.atoms.labels['species'].unique_values
+            group_points = {
+                'atoms': [
+                    {
+                        'label': 'species',
+                        'styles': {
+                            'fill_colour': {
+                                species: 'rgb({}, {}, {})'.format(
+                                    *ATOM_JMOL_COLOURS[species])
+                                for species in uniq_species
+                            },
                         },
                     },
-                },
-            ],
-        }
-        if 'species_order' in self.sites['atoms'].labels:
-            group_points['atoms'].append({
-                'label': 'species_order',
-                'styles': {}
-            })
-        if self.crystals:
-            group_points['atoms'].append({
-                'label': 'crystal_idx',
-                'styles': {},
-            })
-        style_points = {
-            'lattice_sites': {
-                'marker_symbol': 'cross',
-                'marker_size': 5,
-                'fill_colour': 'gray',
-            },
-            'interstices': {
-                'marker_symbol': 'square-open',
-                'marker_size': 4,
-                'fill_colour': 'pink',
+                ],
             }
-        }
-        out = {
-            'style_points': style_points,
-            'group_points': group_points,
-        }
-        return out
+            if 'species_order' in self.sites['atoms'].labels:
+                group_points['atoms'].append({
+                    'label': 'species_order',
+                    'styles': {}
+                })
+            if self.crystals:
+                group_points['atoms'].append({
+                    'label': 'crystal_idx',
+                    'styles': {},
+                })
+            visual_args.update({'group_points': group_points})
 
-    def show(self, **visual_args):
+        if 'style_points' not in visual_args:
+
+            style_points = {
+                'lattice_sites': {
+                    'marker_symbol': 'cross',
+                    'marker_size': 5,
+                    'fill_colour': 'gray',
+                },
+                'interstices': {
+                    'marker_symbol': 'square-open',
+                    'marker_size': 4,
+                    'fill_colour': 'pink',
+                }
+            }
+            visual_args.update({'style_points': style_points})
+
+        return visual_args
+
+    def show(self, layout_args=None, **visual_args):
         gg = self.get_geometry_group()
-        visual_args = visual_args or self._get_default_visual_args()
-        return gg.show(**visual_args)
+        visual_args = self._set_default_visual_args(visual_args)
+        return gg.show(**visual_args, layout_args=layout_args)
 
     def show_projection(self, look_at, up, width=None, height=None, depth=None,
                         camera_translate=None, **visual_args):
