@@ -2,12 +2,15 @@
 
 import warnings
 from itertools import combinations
+import copy
 
 import numpy as np
 import mendeleev
 import spglib
 from vecmaths import rotation, geometry
+from vecmaths.utils import snap_arr
 from gemo import GeometryGroup, Box, Sites
+from gemo.camera import OrthographicCamera
 
 from atomistic import ATOM_JMOL_COLOURS
 from atomistic.utils import get_column_vector
@@ -68,10 +71,9 @@ class AtomisticStructure(object):
             sites = {}
 
         self.origin = origin
-        self._sites = self._init_sites(sites, crystals)
+        self._init_sites(sites, crystals)
         self.supercell = supercell
         self.meta = {}
-        self.crystals = crystals
 
         if overlap_tol:
             self.check_overlapping_atoms(overlap_tol)
@@ -82,6 +84,14 @@ class AtomisticStructure(object):
 
         if tile:
             self.tile(tile)
+
+    # @property
+    # def supercell(self):
+    #     return snap_arr(self._supercell, 0, tol=1e-12)
+
+    # @supercell.setter
+    # def supercell(self, supercell):
+    #     self._supercell = supercell
 
     def _init_sites(self, sites, crystals):
         'Merge crystal-less sites with crystal sites and add attributes.'
@@ -97,6 +107,7 @@ class AtomisticStructure(object):
                 all_sites.update({name: combined})
             for i in crystals:
                 i.atomistic_structure = self
+                i._sites = None
 
         # Merge crystal-less sites:
         for name, sites_obj in sites.items():
@@ -117,7 +128,12 @@ class AtomisticStructure(object):
             sites_obj.parent_visual_handlers.append(self.refresh_visual)
             setattr(self, name, sites_obj)
 
-        return all_sites
+        self._sites = all_sites
+        self.crystals = crystals
+
+        if crystals:
+            for i in crystals:
+                i._init_sites(i.sites)
 
     def translate(self, shift):
         """
@@ -159,7 +175,8 @@ class AtomisticStructure(object):
         for crystal in self.crystals:
             crystal.rotate(rot_mat, centre=self.origin)
 
-    def get_visual(self, **kwargs):
+    def get_geometry_group(self):
+        'Get the GeometryGroup object for visualisation.'
         points = {k: v for k, v in self.sites.items()}
         boxes = {'supercell': Box(edge_vectors=self.supercell, origin=self.origin)}
         for c_idx, c in enumerate(self.crystals):
@@ -167,6 +184,10 @@ class AtomisticStructure(object):
                 'crystal {}'.format(c_idx): Box(edge_vectors=c.box_vecs, origin=c.origin)
             })
         gg = GeometryGroup(points=points, boxes=boxes)
+
+        return gg
+
+    def _get_default_visual_args(self):
         uniq_species = self.atoms.labels['species'].unique_values
         group_points = {
             'atoms': [
@@ -203,14 +224,49 @@ class AtomisticStructure(object):
                 'fill_colour': 'pink',
             }
         }
-        vis = gg.show(group_points=group_points, style_points=style_points)
-        return vis
+        out = {
+            'style_points': style_points,
+            'group_points': group_points,
+        }
+        return out
 
-    def show(self, **kwargs):
-        return self.get_visual(**kwargs)
+    def show(self, **visual_args):
+        gg = self.get_geometry_group()
+        visual_args = visual_args or self._get_default_visual_args()
+        return gg.show(**visual_args)
 
-    def project(self):
-        pass
+    def show_projection(self, look_at, up, width=None, height=None, depth=None,
+                        camera_translate=None, **visual_args):
+
+        geom_group = self.get_geometry_group()
+        camera = OrthographicCamera.from_bounding_box(
+            geom_group,
+            look_at=look_at,
+            up=up,
+            width=width,
+            height=height,
+            depth=depth,
+            camera_translate=camera_translate,
+        )
+        geom_proj = geom_group.project(camera)
+        visual_args = visual_args or self._get_default_visual_args()
+        return geom_proj.show(**visual_args)
+
+    def preview_projection(self, look_at, up, width=None, height=None, depth=None,
+                           camera_translate=None, **visual_args):
+        geom_group = self.get_geometry_group()
+        camera = OrthographicCamera.from_bounding_box(
+            geom_group,
+            look_at=look_at,
+            up=up,
+            width=width,
+            height=height,
+            depth=depth,
+            camera_translate=camera_translate,
+        )
+        geom_proj = geom_group.project(camera)
+        visual_args = visual_args or self._get_default_visual_args()
+        return geom_proj.preview(**visual_args)
 
     def reorient_to_lammps(self):
         """
