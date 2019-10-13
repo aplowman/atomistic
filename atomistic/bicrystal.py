@@ -900,7 +900,8 @@ class GammaSurface(object):
                 continue
 
             fitted_data = self._fit_expansions(self.expansions[idx],
-                                               self.data[data_name][idx])
+                                               self.data[data_name][idx],
+                                               fit_size)
 
             fit['first_index'].append(idx[0])
             fit['minimum'].append(fitted_data['minimum'])
@@ -913,8 +914,13 @@ class GammaSurface(object):
             data_name: fit
         })
 
-    def _fit_expansions(self, expansions, data):
+    def _fit_expansions(self, expansions, data, fit_size):
         'Do quadratic fit on data with expansions.'
+
+        # Take the lowest-`fit_size` data:
+        data_idx = np.argsort(data)[:fit_size]
+        expansions = expansions[data_idx]
+        data = data[data_idx]
 
         poly_coeff = np.polyfit(expansions, data, 2)
         p1d = np.poly1d(poly_coeff)
