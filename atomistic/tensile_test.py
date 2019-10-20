@@ -168,9 +168,16 @@ class AtomisticTensileTest(object):
         self.data[ts_data_name] = np.array(ts_data)
 
     def get_traction_separation_plot_data(self, ts_data_name='ts_energy', SI_energy=True):
+        x = self.expansions
+        y = self.data[ts_data_name] * ENERGY_PER_AREA_UNIT_CONV if SI_energy else 1
+
+        srt_idx = np.argsort(x)
+        x = x[srt_idx]
+        y = y[srt_idx]
+
         plot_dat = {
-            'x': self.expansions,
-            'y': self.data[ts_data_name] * ENERGY_PER_AREA_UNIT_CONV if SI_energy else 1,
+            'x': x,
+            'y': y,
         }
         return plot_dat
 
