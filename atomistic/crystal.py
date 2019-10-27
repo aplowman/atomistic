@@ -19,7 +19,7 @@ REPR_INDENT = 4
 
 def get_bounding_box(box, bound_vecs=None, padding=0):
     """
-    Find bounding boxes around parallelopipeds.
+    Find bounding boxes around parallelepipeds.
 
     Parameters
     ----------
