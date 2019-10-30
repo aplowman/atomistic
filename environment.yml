@@ -8,4 +8,3 @@ dependencies:
 - autopep8
 - twine
 - wheel
-- ruamel.yaml
