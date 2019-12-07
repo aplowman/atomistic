@@ -470,21 +470,20 @@ class VoronoiTessellation(object):
 
         return ret
 
-    def get_geometry_group(self, include_atoms, show_vertices, show_ridges):
-        'Get the GeometryGroup object for visualisation.'
+    def get_geometry_group_points(self, include_atoms, show_vertices, show_ridges,
+                                  show_atoms=False):
 
-        points = {
-            'atoms': Sites(
-                self.points,
-                labels={
-                    'volume': self.point_volumes,
-                }
-            ),
-        }
-
-        lines = {}
-
-        atom_label_str = 'Atom #{}'
+        include_atoms = self._validate_include_atoms_arg(include_atoms)
+        points = {}
+        if show_atoms:
+            points.update({
+                'atoms': Sites(
+                    self.points,
+                    labels={
+                        'volume': self.point_volumes,
+                    }
+                ),
+            })
 
         if show_vertices:
             # Atom vertices for given atoms:
@@ -493,6 +492,13 @@ class VoronoiTessellation(object):
                 atom_verts = self.vertices[atom_vert_idx].T
                 points.update({'vertices_{}'.format(atom_idx): Sites(atom_verts)})
 
+        return points
+
+    def get_geometry_group_lines(self, include_atoms, show_vertices, show_ridges):
+
+        include_atoms = self._validate_include_atoms_arg(include_atoms)
+
+        lines = {}
         if show_ridges:
             all_facet_atom_idx = []
             for facet_idx, i in enumerate(self.facet_points):
@@ -534,16 +540,25 @@ class VoronoiTessellation(object):
                             'atom_ridges_{}'.format(facet_atom_idx): facet_lines
                         })
 
+        return lines
+
+    def get_geometry_group_boxes(self, include_atoms, show_vertices, show_ridges):
+
         boxes = {'supercell': Box(edge_vectors=self.box)}
+        return boxes
+
+    def get_geometry_group(self, include_atoms, show_vertices, show_ridges):
+        'Get the GeometryGroup object for visualisation.'
+
+        points = self.get_geometry_group_points(
+            include_atoms, show_vertices, show_ridges, show_atoms=True)
+        lines = self.get_geometry_group_lines(include_atoms, show_vertices, show_ridges)
+        boxes = self.get_geometry_group_boxes(include_atoms, show_vertices, show_ridges)
         gg = GeometryGroup(points=points, boxes=boxes, lines=lines)
 
         return gg
 
-    def show_new(self, layout_args=None, include_atoms=None, show_vertices=False,
-                 show_ridges=True):
-
-        # TODO: colour_atoms_by_volume
-
+    def _validate_include_atoms_arg(self, include_atoms):
         if include_atoms is None:
             include_atoms = 'all'
 
@@ -551,7 +566,12 @@ class VoronoiTessellation(object):
             include_atoms = np.arange(self.points.shape[1])
         else:
             include_atoms = np.array(include_atoms)
+        return include_atoms
 
+    def show_new(self, layout_args=None, include_atoms=None, show_vertices=False,
+                 show_ridges=True):
+
+        # TODO: colour_atoms_by_volume
         gg = self.get_geometry_group(include_atoms, show_vertices, show_ridges)
         style_points = {
             key: {

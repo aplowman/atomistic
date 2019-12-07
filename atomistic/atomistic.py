@@ -86,6 +86,8 @@ class AtomisticStructure(object):
         if tile:
             self.tile(tile)
 
+        self.tessellation = None  # Set in `set_voronoi_tessellation`
+
     # @property
     # def supercell(self):
     #     return snap_arr(self._supercell, 0, tol=1e-12)
@@ -184,7 +186,18 @@ class AtomisticStructure(object):
             boxes.update({
                 'crystal {}'.format(c_idx): Box(edge_vectors=c.box_vecs, origin=c.origin)
             })
-        gg = GeometryGroup(points=points, boxes=boxes)
+
+        lines = {}
+        if self.tessellation:
+            include_atoms = None
+            show_vertices = False
+            show_ridges = True
+            points.update(self.tessellation.get_geometry_group_points(
+                include_atoms, show_vertices, show_ridges))
+            lines.update(self.tessellation.get_geometry_group_lines(
+                include_atoms, show_vertices, show_ridges))
+
+        gg = GeometryGroup(points=points, boxes=boxes, lines=lines)
 
         return gg
 
@@ -329,6 +342,10 @@ class AtomisticStructure(object):
                 i.basis = self.supercell
                 i._coords[dirs] -= np.floor(i._coords[dirs])
                 i.basis = None  # reset to standard basis
+
+    def set_voronoi_tessellation(self):
+        'Perform a Voronoi tessellation of the atoms within the periodic supercell.'
+        self.tessellation = VoronoiTessellation(self.supercell, self.atoms.coords)
 
     @property
     def sites(self):
