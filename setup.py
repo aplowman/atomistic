@@ -54,11 +54,12 @@ setup(
     },
     install_requires=[
         'numpy',
+        'scipy',
         'gemo',
         'vecmaths',
         'bravais',
         'mendeleev==0.4.5',
-        'spglib',
+        # 'spglib',
         'beautifultable',
     ],
     project_urls={
