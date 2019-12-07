@@ -568,8 +568,8 @@ class VoronoiTessellation(object):
             include_atoms = np.array(include_atoms)
         return include_atoms
 
-    def show_new(self, layout_args=None, include_atoms=None, show_vertices=False,
-                 show_ridges=True):
+    def show(self, layout_args=None, include_atoms=None, show_vertices=False,
+             show_ridges=True):
 
         # TODO: colour_atoms_by_volume
         gg = self.get_geometry_group(include_atoms, show_vertices, show_ridges)
