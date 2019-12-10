@@ -674,6 +674,35 @@ class AtomisticStructure(object):
         # print('AS.refresh_visual invoked by object: {}'.format(obj))
         pass
 
+    def same_atoms(self, structure):
+        'Check if the supercell and atoms and the same as in another AtomisticStructure.'
+
+        # Supercell:
+        if not np.allclose(self.supercell, structure.supercell):
+            return False
+
+        # Atoms:
+        atoms_srt_idx = np.lexsort(np.round(self.atoms.coords, decimals=9))
+        atoms = self.atoms.coords[:, atoms_srt_idx]
+
+        struct_atoms_srt_idx = np.lexsort(np.round(structure.atoms.coords, decimals=9))
+        struct_atoms = structure.atoms.coords[:, struct_atoms_srt_idx]
+
+        # Wrap atoms to within the supercell:
+        atoms_sup = np.linalg.inv(self.supercell) @ atoms
+        struct_atoms_sup = np.linalg.inv(structure.supercell) @ struct_atoms
+
+        boundary_idx = structure.boundary_idx
+        struct_atoms_sup[boundary_idx] -= np.floor(struct_atoms_sup[boundary_idx])
+        atoms_sup[boundary_idx] -= np.floor(atoms_sup[boundary_idx])
+
+        bad_atoms_idx = np.where(np.abs(atoms_sup - struct_atoms_sup) > 1e-6)[1]
+
+        if not np.allclose(struct_atoms_sup, atoms_sup):
+            return False
+
+        return True
+
 
 class AtomisticSimulation(object):
     'Class to store the results of an atomistic simulation on an AtomisticStructure.'
