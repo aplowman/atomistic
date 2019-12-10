@@ -502,6 +502,24 @@ class Bicrystal(AtomisticStructure):
         self.crystals[0].translate(-self.non_boundary_vec / 2)
         self.crystals[1].translate(self.non_boundary_vec / 2)
 
+        if self.tessellation is not None:            
+            self.tessellation = None
+            self.set_voronoi_tessellation()
+
+        if self.atom_site_geometries is not None:
+            self.atom_site_geometries = None
+            self.set_atom_site_geometries()
+
+    def set_atom_site_geometries(self):
+
+        super().set_atom_site_geometries()
+
+        # Distance from atoms to supercell midplane in the boundary-normal direction:
+        dist = self.get_distance_from_boundary(self.atoms.coords, level='mid')
+        self.atom_site_geometries.update({
+            'interface_distance': dist,
+        })
+
 
 class GammaSurface(object):
 

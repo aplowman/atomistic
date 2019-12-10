@@ -16,6 +16,7 @@ from gemo.camera import OrthographicCamera
 from atomistic import ATOM_JMOL_COLOURS
 from atomistic.utils import get_column_vector
 from atomistic.crystal import CrystalStructure
+from atomistic.voronoi import VoronoiTessellation
 
 
 def get_vec_squared_distances(vecs):
@@ -86,7 +87,8 @@ class AtomisticStructure(object):
         if tile:
             self.tile(tile)
 
-        self.tessellation = None  # Set in `set_voronoi_tessellation`
+        self.tessellation = None            # Set in `set_voronoi_tessellation`
+        self.atom_site_geometries = None    # Set in `set_atom_site_geometries`
 
     # @property
     # def supercell(self):
@@ -345,7 +347,40 @@ class AtomisticStructure(object):
 
     def set_voronoi_tessellation(self):
         'Perform a Voronoi tessellation of the atoms within the periodic supercell.'
-        self.tessellation = VoronoiTessellation(self.supercell, self.atoms.coords)
+        if not self.tessellation:
+            self.tessellation = VoronoiTessellation(self.supercell, self.atoms.coords)
+
+    def _get_atom_neighbours(self):
+
+        neighbours = []
+        for atom_idx in range(len(self.atoms)):
+
+            facets_idx = self.tessellation.point_facets[atom_idx]
+            fac_pts = self.tessellation.facet_points[facets_idx]
+            fac_pts_per = self.tessellation.facet_points_periodic[facets_idx]
+            fac_pts_ext = self.tessellation.ridge_points_external_idx[facets_idx]
+            neigh_atom_idx = fac_pts_per[fac_pts != atom_idx]
+            is_external = (fac_pts[fac_pts != atom_idx] == -1)
+
+            neighbours.append({
+                'atom_idx': neigh_atom_idx,
+                'is_external': is_external,
+                'external_atom_idx': fac_pts_ext,
+                'area': self.tessellation.facet_areas[facets_idx],
+                'length': self.tessellation.neighbour_distances[facets_idx],
+                'vectors': self.tessellation.neighbour_vectors[facets_idx],
+            })
+
+        return neighbours
+
+    def set_atom_site_geometries(self):
+        if not self.atom_site_geometries:
+            self.set_voronoi_tessellation()
+            neighbours = self._get_atom_neighbours()
+            self.atom_site_geometries = {
+                'volume': self.tessellation.point_volumes,
+                'neighbours': neighbours,
+            }
 
     @property
     def sites(self):
@@ -638,3 +673,98 @@ class AtomisticStructure(object):
     def refresh_visual(self, obj):
         # print('AS.refresh_visual invoked by object: {}'.format(obj))
         pass
+
+
+class AtomisticSimulation(object):
+    'Class to store the results of an atomistic simulation on an AtomisticStructure.'
+
+    def __init__(self, structure, data=None, atom_displacements=None,
+                 supercell_displacements=None):
+        """
+        Parameters
+        ----------
+        structure : AtomisticStructure
+            Initial structure at the start of the simulation.
+        data : dict of (str: ndarray of outer shape (N,)), optional
+            Additional data to associated with each relaxation step. Each key must be an
+            ndarray of outer shape (N,) for N relaxation steps.            
+        atom_displacements : ndarray of shape (N, M, 3), optional
+            Stack of arrays of column vectors representing the displacements of the atoms
+            from their original positions at each relaxation step. `N` is the number of
+            relaxation steps and `M` is the number of atoms.
+        supercell_displacements : ndarray of shape (N, 3, 3), optional
+            Stack of arrays of three column vectors representing the displacements of
+            the supercell edge vectors from their original positions at each relaxation
+            step. `N` is the number of relaxation steps.
+
+        """
+
+        self.structure = structure
+        self.atom_displacements = atom_displacements
+        self.supercell_displacements = supercell_displacements
+        self.data = data or {}
+
+        self._validate()
+
+    @property
+    def num_steps(self):
+        return self.atom_displacements.shape[0]
+
+    def _validate(self):
+
+        # Check `ndarray`s:
+        if self.atom_displacements is None:
+            self.atom_displacements = np.zeros((1, 3, len(self.structure.atoms)))
+        elif not isinstance(self.atom_displacements, np.ndarray):
+            msg = '`atom_displacements` must be a Numpy ndarray.'
+            raise ValueError(msg)
+
+        num_steps = self.atom_displacements.shape[0]
+        num_atoms = self.atom_displacements.shape[2]
+
+        if self.supercell_displacements is None:
+            self.supercell_displacements = np.zeros((num_steps, 3, 3))
+        elif not isinstance(self.supercell_displacements, np.ndarray):
+            msg = '`supercell_displacements` must be a Numpy ndarray.'
+            raise ValueError(msg)
+
+        # Check same number of steps/atoms:
+        if self.supercell_displacements.shape[0] != num_steps:
+            msg = ('Inconsistent number of optimisation steps: `atom_displacements` has '
+                   '{} but `supercell_displacements has {}.')
+            raise ValueError(msg.format(num_steps, self.supercell_displacements.shape[0]))
+
+        msg = 'Data value for key "{}" must be an ndarray or list of outer shape ({},)'
+        for k, v in self.data.items():
+            if isinstance(v, (np.ndarray, list)):
+                if len(v) != num_steps:
+                    msg += ' but has length {}.'
+                    raise ValueError(msg.format(k, num_steps, len(v)))
+            else:
+                msg += '.'
+                raise ValueError(msg.format(k, num_steps))
+
+    def get_step(self, opt_step=-1, atom_site_geometries=True):
+        'Get the AtomisticStructure and data from a given step in the relaxation process.'
+
+        structure = copy.deepcopy(self.structure)
+        structure.atom_site_geometries = None
+        structure.tessellation = None
+
+        structure.atoms += self.atom_displacements[opt_step]
+        structure.supercell += self.supercell_displacements[opt_step]
+
+        data = {k: v[opt_step] for k, v in self.data.items()}
+
+        step = {
+            'structure': structure,
+            'data': data
+        }
+
+        if atom_site_geometries:
+            structure.set_atom_site_geometries()
+            step.update({
+                'atom_site_geometries': structure.atom_site_geometries,
+            })
+
+        return step
