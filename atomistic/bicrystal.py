@@ -529,7 +529,7 @@ class Bicrystal(AtomisticStructure):
         self.crystals[0].translate(-self.non_boundary_vec / 2)
         self.crystals[1].translate(self.non_boundary_vec / 2)
 
-        if self.tessellation is not None:            
+        if self.tessellation is not None:
             self.tessellation = None
             self.set_voronoi_tessellation()
 
