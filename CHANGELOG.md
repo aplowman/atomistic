@@ -1,5 +1,20 @@
 # Change Log
 
+## [0.3.1] - 2019.10.12
+
+### Added
+
+- New `BulkCrystal` class
+- New `AtomisticSimulation` class to represent a simulation that may have involved a relaxation.
+- Added method `set_voronoi_tessellation` to `AtomisticStructure` class, which sets the `tessellation` attribute to a `VoronoiTessellation` object from the new `voronoi` module.
+- Add `Bicrystal` methods: `get_point_in_boundary_plane` and `get_distance_from_boundary`.
+- Add `Atomistic` method: `same_atoms` to check for equivalent atom positions.
+
+### Fixed
+
+- Fix non-implementation of `GammaSurface` fit size.
+- `AtomisticTensileTest.get_traction_separation_plot_data` now returns sorted data
+
 ## [0.3.0] - 2019.09.15
 
 ### Added
