@@ -239,15 +239,42 @@ class Bicrystal(AtomisticStructure):
         'Get the magnitude of the non-boundary vector.'
         return np.linalg.norm(self.non_boundary_vec)
 
-    def distance_from_gb(self, points):
-        """
-        Computes the distance from each in an array of column vector to the origin grain
-        boundary plane.
+    def get_point_in_boundary_plane(self, level='mid'):
+        """Get a point in the boundary plane.
 
-        # TODO: does this assume supercell origin is at (0,0,0)?
-
+        Parameters
+        ----------
+        level : str 
+            Which boundary plane to consider. One of "low", "mid" or "high". Default is
+            "mid".
         """
-        return np.einsum('jk,jl->k', points, self.n_unit)
+
+        shift = self.non_boundary_vec.copy()
+        if level == 'low':
+            shift *= 0
+        elif level == 'mid':
+            shift *= 0.5
+        elif level == 'high':
+            shift *= 1
+
+        return self.origin + shift
+
+    def get_distance_from_boundary(self, points, level):
+        """Get the distance of a set of points from one of the boundary planes of the
+        supercell.
+
+        Parameters
+        ----------
+        points : ndarray of shape (3, N)
+        level : str 
+            Which boundary plane to consider. One of "low", "mid" or "high". Default is
+            "mid".
+        """
+
+        vec = points - self.get_point_in_boundary_plane(level)
+        distances = np.einsum('jk,jl->k', vec, self.n_unit)
+
+        return distances
 
     def reorient_to_xy(self):
         """
