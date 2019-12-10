@@ -59,7 +59,7 @@ setup(
         'vecmaths',
         'bravais',
         'mendeleev==0.4.5',
-        # 'spglib',
+        'spglib',
         'beautifultable',
     ],
     project_urls={
