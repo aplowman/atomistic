@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.3.2] - 2020.01.15
+
+### Added
+
+- New function `atomistic_simulation_from_bicrystal_parameters` in `bicrystal` module.
+
 ## [0.3.1] - 2019.12.10
 
 ### Added
