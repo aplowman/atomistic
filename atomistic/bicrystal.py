@@ -13,9 +13,89 @@ import numpy as np
 from spatial_sites import Sites
 
 from atomistic import mathsutils, TT_SUPERCELL_TYPE
-from atomistic.atomistic import AtomisticStructure
+from atomistic.atomistic import AtomisticStructure, AtomisticSimulation
 from atomistic.crystal import CrystalBox
 from atomistic.utils import fractions_to_common_denom, zeropad
+
+
+def atomistic_simulation_from_bicrystal_parameters(all_atoms, all_supercells, species,
+                                                   data, meta, **bicrystal_kwargs):
+    """Generate a Bicrystal from atoms and a supercell definition by assuming the two
+    crystals are of equal size."""
+
+    if 'non_boundary_idx' not in bicrystal_kwargs:
+        msg = ('Specify which column of the supercell represents the out-of-boundary'
+               ' direction using the `non_boundary_idx` argument.')
+        raise ValueError(msg)
+
+    non_boundary_idx = bicrystal_kwargs['non_boundary_idx']
+
+    crystal_1_box = np.copy(all_supercells[0])
+    crystal_1_box[:, non_boundary_idx] /= -2
+
+    # Generate crystal 0 at the "top".
+    crystal_0_box = np.copy(all_supercells[0])
+    crystal_0_box[:, non_boundary_idx] /= +2
+
+    origin = np.copy(crystal_0_box[:, non_boundary_idx])
+
+    atoms_sup = np.linalg.inv(all_supercells[0]) @ all_atoms[0]
+    atoms_0_idx = np.where(atoms_sup[non_boundary_idx] >= 0.5)[0]
+    atoms_1_idx = np.where(atoms_sup[non_boundary_idx] < 0.5)[0]
+
+    # Reorder all atoms::
+    reordered_idx = np.concatenate([atoms_0_idx, atoms_1_idx])
+    all_atoms = all_atoms[:, :, reordered_idx]
+
+    sites_0 = {
+        'atoms': Sites(
+            coords=all_atoms[0][:, atoms_0_idx],
+            vector_direction='col',
+            labels={
+                'species': species[atoms_0_idx],
+            },
+        ),
+    }
+    sites_1 = {
+        'atoms': Sites(
+            coords=all_atoms[0][:, atoms_1_idx],
+            vector_direction='col',
+            labels={
+                'species': species[atoms_1_idx],
+            },
+        ),
+    }
+
+    crystal_0 = CrystalBox(
+        box_vecs=crystal_0_box,
+        sites=sites_0,
+        origin=origin,
+    )
+    crystal_1 = CrystalBox(
+        box_vecs=crystal_1_box,
+        sites=sites_1,
+        origin=origin,
+    )
+
+    as_params = {
+        'supercell': all_supercells[0],
+        'crystals': [crystal_0, crystal_1],
+    }
+
+    bicrystal = Bicrystal(as_params, **bicrystal_kwargs)
+    bicrystal.meta.update(meta)
+
+    atom_displacements = all_atoms - all_atoms[0]
+    supercell_displacements = all_supercells - all_supercells[0]
+
+    sim = AtomisticSimulation(
+        structure=bicrystal,
+        data=data,
+        atom_displacements=atom_displacements,
+        supercell_displacements=supercell_displacements,
+    )
+
+    return sim
 
 
 def distance_from_origin(vecs, stretch_origin, stretch_direction):
