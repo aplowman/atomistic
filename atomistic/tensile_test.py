@@ -6,6 +6,7 @@ import numpy as np
 
 from atomistic import ENERGY_PER_AREA_UNIT_CONV, TT_SUPERCELL_TYPE
 from atomistic.bicrystal import Bicrystal
+from atomistic.mathsutils import central_diff
 from atomistic.utils import zeropad
 
 
@@ -180,6 +181,37 @@ class AtomisticTensileTest(object):
             'y': y,
         }
         return plot_dat
+
+    def get_stress_data(self, w_sep, ts_data_name='ts_energy', SI_energy=True, n_diff=3,
+                        stress_threshold=20):
+
+        ts_dat = self.get_traction_separation_plot_data(ts_data_name, SI_energy)
+        stress_x = ts_dat['x']
+        stress_y = central_diff(stress_x, ts_dat['y'], n_diff) * 10
+
+        stress_filter_idx = np.where(stress_y < stress_threshold)[0]
+        stress_y_filtered = stress_y[stress_filter_idx]
+        stress_x_filtered = stress_x[stress_filter_idx]
+
+        max_stress_idx = np.argmax(stress_y_filtered)
+        max_stress_x = stress_x_filtered[max_stress_idx]
+        max_stress_y = stress_y_filtered[max_stress_idx]
+
+        stress_critical = max_stress_y
+        sep_critical = max_stress_x
+        sep_final = (2 * w_sep) / (stress_critical / 10)
+
+        out = {
+            'stress_x': stress_x,
+            'stress_y': stress_y,
+            'stress_x_filtered': stress_x_filtered,
+            'stress_y_filtered': stress_y_filtered,
+            'stress_critical': stress_critical,
+            'separation_critical': sep_critical,
+            'separation_final': sep_final,
+        }
+
+        return out
 
 
 class AtomisticTensileTestCoordinate(object):

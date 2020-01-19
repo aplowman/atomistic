@@ -59,3 +59,19 @@ def sigmoid(x, a, b, c, d):
 
 def linear(x, m=1, c=0):
     return m * x + c
+
+
+def central_diff(x, y, central_diff_n):
+    """Central difference 'derivative'."""
+
+    diff = np.zeros_like(x)
+
+    if central_diff_n == 3:
+        for i in range(1, len(x) - 1):
+            diff[i] = (y[i+1] - y[i-1]) / (x[i+1] - x[i-1])
+
+    elif central_diff_n == 5:
+        for i in range(2, len(x) - 2):
+            diff[i] = (y[i-2] - 8*y[i-1] + 8*y[i+1] - y[i+2]) / (6 * (x[i+1] - x[i-1]))
+
+    return diff
