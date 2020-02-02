@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.3.3] - 2020.02.02
+
+### Added 
+
+- New method `get_stress_data` add to `AtomisticTensileTest` to enable estimates of the critical traction for cleavage.
+
 ## [0.3.2] - 2020.01.15
 
 ### Added
