@@ -33,7 +33,7 @@ class AtomisticTensileTest(object):
         Parameters
         ----------
         base_structure : Bicrystal
-            Base bicrystal whose gamma surface is to be (or was) investigated.
+            Base bicrystal on which a tensile test is to be (or was) investigated.
         expansions : ndarray of list of shape (N,)
             The set of expansions to apply in the out-of-boundary direction of
             `base_structure`.
