@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.3.4] - 2022.04.11
+
+### Fixed
+
+- Various fixes.
+
 ## [0.3.3] - 2020.02.02
 
 ### Added 
