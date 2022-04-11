@@ -1,9 +1,27 @@
 """`atomistic.voronoi.py`"""
 
 import numpy as np
-from scipy.spatial import Voronoi, ConvexHull
+from scipy.spatial import Voronoi, ConvexHull, Delaunay
 
 from gemo import Box, GeometryGroup, Sites
+
+
+def in_hull(points, hull_points):
+    """Test if a set of points are within a convex hull.
+
+    Parameters
+    ----------
+    points : ndarray of shape (N, 3)
+        Row vectors of points to test.
+    hull_points : ndarray of shape (M, 3)
+        Row vectors of vertices that are used to compute a convex hull
+
+    """
+
+    hull = Delaunay(hull_points)
+    is_in = hull.find_simplex(points) >= 0
+
+    return is_in
 
 
 def get_tiled_sites(box, sites, tiles):
@@ -287,6 +305,11 @@ class VoronoiTessellation(object):
         self.ridge_points_external_idx = tes['ridge_points_external_idx']
         self.external_points = tes['external_points']
 
+        self.bond_regions = {}  # Updated in `set_bond_regions`
+
+        # For storing the bin values of each region of volumetric scalar data:
+        self.binned_volumetric_data = {}
+
     def _get_tessellation(self, box, atoms):
 
         natoms = atoms.shape[1]
@@ -492,6 +515,23 @@ class VoronoiTessellation(object):
                 atom_verts = self.vertices[atom_vert_idx].T
                 points.update({'vertices_{}'.format(atom_idx): Sites(atom_verts)})
 
+        # if self.bond_regions:
+        #     for method, regions in self.bond_regions.items():
+        #         for reg in regions:
+
+        #             point_type = [{True: 'ext', False: 'int'}[i]
+        #                           for i in reg['is_external_idx']]
+
+        #             trace_name = 'bonds[method={}]{}({})--{}({})'.format(
+        #                 method,
+        #                 point_type[0],
+        #                 reg['idx'][0],
+        #                 point_type[1],
+        #                 reg['idx'][1],
+        #             )
+
+        #             points.update({trace_name: Sites(reg['vertices'])})
+
         return points
 
     def get_geometry_group_lines(self, include_atoms, show_vertices, show_ridges):
@@ -540,6 +580,45 @@ class VoronoiTessellation(object):
                             'atom_ridges_{}'.format(facet_atom_idx): facet_lines
                         })
 
+        if 'polyhedron' in self.bond_regions:
+
+            for reg_idx, reg in enumerate(self.bond_regions['polyhedron']):
+
+                point_type = [{True: 'ext', False: 'int'}[i]
+                              for i in reg['is_external_idx']]
+
+                trace_name = 'bonds({})[method={}]{}({})--{}({})'.format(
+                    reg_idx,
+                    'polyhedron',
+                    point_type[0],
+                    reg['idx'][0],
+                    point_type[1],
+                    reg['idx'][1],
+                )
+
+                # Lines for the facet:
+                facet_vert_idx = reg['facet_verts_idx']
+                facet_verts = self.vertices[facet_vert_idx].T  # shape (3, N)
+                facet_verts_roll = np.roll(facet_verts, -1, axis=1)
+                facet_lines = np.concatenate(
+                    [facet_verts[:, None].T, facet_verts_roll[:, None].T],
+                    axis=1
+                ).swapaxes(1, 2)  # shape (N, 3, 2)
+
+                # Lines joining the points (atoms) to the facet vertices:
+                point_lines = []
+                for i in facet_verts.T:
+                    point_lines.append(
+                        np.hstack((i[:, None], reg['point_verts'][:, 0:1]))[None]
+                    )
+                    point_lines.append(
+                        np.hstack((i[:, None], reg['point_verts'][:, 1:2]))[None]
+                    )
+
+                point_lines_concat = np.concatenate(point_lines)
+                bond_lines = np.concatenate((facet_lines, point_lines_concat))
+                lines.update({trace_name: bond_lines})
+
         return lines
 
     def get_geometry_group_boxes(self, include_atoms, show_vertices, show_ridges):
@@ -581,3 +660,70 @@ class VoronoiTessellation(object):
         }
 
         return gg.show(style_points=style_points, layout_args=layout_args)
+
+    def set_bond_regions(self, method='polyhedron'):
+        """Define regions in space that can be considered to be the bonds between
+        neighbouring sites.
+
+        Parameters
+        ----------
+        method : str 
+            Method of defining the bond regions. If "polyhedron", the bond region between
+            two neighbouring atoms is defined by the vertices of the facet between the two
+            sites plus the vertices of the sites themselves.
+        """
+
+        allowed_methods = ['polyhedron']
+        if method not in allowed_methods:
+            raise ValueError('`method` must be one of: {}'.format(allowed_methods))
+
+        all_bond_regions = []
+
+        # Loop over all facets:
+        for i, ip, j, v, facet_area in zip(
+            self.facet_points,
+            self.facet_points_periodic,
+            self.ridge_points_external_idx,
+            self.facet_vertices,
+            self.facet_areas,
+        ):
+            if j == -1:
+                # Facet is internal
+                point_verts = self.points[:, i]
+                points_idx = list(i)
+                is_ext_idx = [False, False]
+
+            else:
+                # Facet is external
+                points_idx = list(ip)
+                if i[1] == -1:
+                    int_point_idx = i[0]
+                    is_ext_idx = [False, True]
+                else:
+                    int_point_idx = i[1]
+                    is_ext_idx = [True, False]
+
+                point_verts = self.points[:, int_point_idx, None]
+                ext_point_verts = self.external_points[j, :, None]
+                point_verts = np.hstack([point_verts, ext_point_verts])
+
+            idx_srt_idx = np.argsort(points_idx)
+
+            facet_verts = self.vertices[v].T
+            bond_verts = np.hstack([point_verts, facet_verts])
+            all_bond_regions.append({
+                'vertices': bond_verts,
+                'mid_point': np.mean(bond_verts, axis=1),
+                'facet_verts_idx': v,
+                'point_verts': point_verts,
+                'idx': points_idx,
+                'is_external_idx': is_ext_idx,
+                'facet_area': facet_area,
+                'distance': np.linalg.norm(point_verts[:, 0] - point_verts[:, 1]),
+            })
+
+        if method in self.bond_regions:
+            msg = 'Bond regions have already been set using method "{}"'.format(method)
+            raise ValueError(msg)
+
+        self.bond_regions.update({method: all_bond_regions})

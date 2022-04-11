@@ -15,7 +15,7 @@ from spatial_sites import Sites
 from atomistic import mathsutils, TT_SUPERCELL_TYPE
 from atomistic.atomistic import AtomisticStructure, AtomisticSimulation
 from atomistic.crystal import CrystalBox
-from atomistic.utils import fractions_to_common_denom, zeropad
+from atomistic.utils import fractions_to_common_denom, zeropad, where_any_in
 
 
 def atomistic_simulation_from_bicrystal_parameters(all_atoms, all_supercells, species,
@@ -627,10 +627,135 @@ class Bicrystal(AtomisticStructure):
             'interface_distance': dist,
         })
 
+    def get_boundary_atoms(self, interface='mid', crystal_idx=None):
+        'Get indices of atoms that have Voronoi neighbours across the boundary.'
+
+        cross_GB_facet_idx = self.get_boundary_facet_idx(
+            include_neighbours=False,
+            interface=interface,
+        )
+        cross_GB_idx = self.tessellation.facet_points_periodic[cross_GB_facet_idx]
+        atoms_idx = np.unique(cross_GB_idx.flatten())
+
+        if crystal_idx is not None:
+            atoms_idx = atoms_idx[self.atoms.crystal_idx[atoms_idx] == crystal_idx]
+
+        return atoms_idx
+
+    def get_boundary_facet_idx(self, include_neighbours=False, interface='mid'):
+        """Get indices of tessellation facets that bisect atoms of opposing grains.
+
+        Parameters
+        ----------
+        include_neighbours : bool, optional
+            If True, include the facets between boundary atoms and all of their neighbours
+            in additional to just the facets between boundary atoms.
+        interface : str, optional
+            One of "mid", "base", "both". If "mid", only get facets that divide atoms
+            across the interface at the middle of the supercell. If "base", only get
+            facets that divide atoms across the bottom/top of the supercell. If "both",
+            get facets from both interfaces.
+
+        """
+
+        if interface not in ['mid', 'base', 'both']:
+            raise ValueError('`interface` must be one of "mid", "base", and "both".')
+
+        if not self.tessellation:
+            self.set_voronoi_tessellation()
+
+        is_cross_GB_facet = np.sum(
+            self.atoms.crystal_idx[self.tessellation.facet_points_periodic],
+            axis=1
+        ) == 1
+        is_cross_GB_facet_idx = np.where(is_cross_GB_facet)[0]
+
+        if interface in ['mid', 'base']:
+            GB_facet_atom_idx = (
+                self.tessellation.facet_points_periodic[is_cross_GB_facet][:, 0]
+            )
+            GB_facet_atoms = self.tessellation.points[:, GB_facet_atom_idx]
+            GB_facet_atoms_frac = self.supercell_inv @ GB_facet_atoms
+            GB_facet_frac_coord = GB_facet_atoms_frac[self.non_boundary_idx]
+            GB_facet_mid_int = np.logical_and(
+                GB_facet_frac_coord < 0.75,
+                GB_facet_frac_coord >= 0.25
+            )
+            if interface == 'mid':
+                facets_idx = is_cross_GB_facet_idx[GB_facet_mid_int]
+            elif interface == 'base':
+                facets_idx = is_cross_GB_facet_idx[np.logical_not(GB_facet_mid_int)]
+        else:
+            facets_idx = is_cross_GB_facet_idx
+
+        if include_neighbours:
+
+            cross_GB_idx = self.tessellation.facet_points_periodic[facets_idx]
+            gb_atoms_idx = np.unique(cross_GB_idx.flatten())
+            facets_idx = np.where(
+                np.logical_or(
+                    where_any_in(
+                        gb_atoms_idx,
+                        self.tessellation.facet_points_periodic[:, 0],
+                        ret_idx=True
+                    ),
+                    where_any_in(
+                        gb_atoms_idx,
+                        self.tessellation.facet_points_periodic[:, 1],
+                        ret_idx=True
+                    )
+                )
+            )[0]
+
+        return facets_idx
+
+    def get_boundary_bond_regions(self, bond_method='polyhedron',
+                                  include_neighbours=False, interface='mid'):
+        'Get bond regions associated with across-GB bonds.'
+
+        if (
+            not self.tessellation or
+            self.tessellation.bond_regions.get(bond_method) is None
+        ):
+            raise ValueError(f'No bond regions defined using method "{bond_method}".')
+
+        out = [
+            self.tessellation.bond_regions[bond_method][i]
+            for i in self.get_boundary_facet_idx(include_neighbours, interface=interface)
+        ]
+        return out
+
+    def get_atom_bond_regions(self, atom_idx, bond_method='polyhedron', area_threshold=2):
+        'Get the bond regions for a given atom.'
+
+        if (
+            not self.tessellation or
+            self.tessellation.bond_regions.get(bond_method) is None
+        ):
+            raise ValueError(f'No bond regions defined using method "{bond_method}".')
+
+        is_cross_GB_facet = np.sum(
+            self.atoms.crystal_idx[self.tessellation.facet_points_periodic],
+            axis=1
+        ) == 1
+
+        out = []
+        for bond_region_idx, i in enumerate(self.tessellation.bond_regions[bond_method]):
+            if (
+                atom_idx in i['idx'] and
+                i['is_external_idx'][i['idx'].index(atom_idx)] == False and
+                i['facet_area'] > area_threshold
+            ):
+                i = {**i, 'is_cross_GB': is_cross_GB_facet[bond_region_idx]}
+                out.append(i)
+
+        return out
+
 
 class GammaSurface(object):
 
-    def __init__(self, base_structure, shifts, expansions, data=None, fitted_data=None):
+    def __init__(self, base_structure, shifts, expansions, data=None, metadata=None,
+                 fitted_data=None):
         """
 
         Parameters
@@ -645,6 +770,8 @@ class GammaSurface(object):
             `base_structure`.
         data : dict, optional
             Dict whose keys are strings and labels are ndarrays of outer dimension (N, )
+        metadata : dict, optional
+            Arbitrary data store.
         fitted_data : dict, optional
             Dict whose keys are strings that must exist in `data`, and whose values are
             sub-dicts whose keys are strings and whose values are ndarrays.
@@ -656,6 +783,7 @@ class GammaSurface(object):
         self.shifts = shifts
         self.expansions = expansions
         self.data = data
+        self.metadata = metadata or {}
         self.fitted_data = self._validate_fitted_data(fitted_data)
 
         self._absolute_shifts = None
@@ -813,6 +941,7 @@ class GammaSurface(object):
             'fitted_data': {
                 k: {fit_key: fit_val.tolist() for fit_key, fit_val in v.items()}
                 for k, v in self.fitted_data.items()},
+            'metadata': self.metadata,
         }
         return out
 
@@ -1243,6 +1372,7 @@ class GammaSurfaceCoordinate(object):
             structure.apply_relative_shift(self.gamma_surface.shifts[self.index], 0)
             structure.apply_boundary_vac(
                 self.gamma_surface.expansions[self.index], 'sigmoid')
+            structure.wrap_sites_to_supercell()
             self._structure = structure
         return self._structure
 

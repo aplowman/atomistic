@@ -168,6 +168,21 @@ class AtomisticTensileTest(object):
 
         self.data[ts_data_name] = np.array(ts_data)
 
+    def get_energy_separation_plot_data(self, data_name='energy'):
+        x = self.expansions
+        y = self.data[data_name]
+        srt_idx = np.argsort(x)
+
+        x = x[srt_idx]
+        y = y[srt_idx]
+
+        plot_dat = {
+            'x': x,
+            'y': y,
+        }
+
+        return plot_dat
+
     def get_traction_separation_plot_data(self, ts_data_name='ts_energy', SI_energy=True):
         x = self.expansions
         y = self.data[ts_data_name] * ENERGY_PER_AREA_UNIT_CONV if SI_energy else 1
@@ -238,6 +253,7 @@ class AtomisticTensileTestCoordinate(object):
     @property
     @requires_base_structure
     def structure(self):
+        'Note that this structure represents the input structure (before relaxation).'
         if not self._structure:
             structure = copy.deepcopy(self.tensile_test.base_structure)
             structure.apply_boundary_vac(

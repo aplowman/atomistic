@@ -61,6 +61,7 @@ setup(
         'mendeleev==0.4.5',
         'spglib',
         'beautifultable',
+        'progress',
     ],
     project_urls={
         'Github': 'https://github.com/aplowman/atomistic',

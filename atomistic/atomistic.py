@@ -13,10 +13,12 @@ from vecmaths.utils import snap_arr
 from gemo import GeometryGroup, Box, Sites
 from gemo.camera import OrthographicCamera
 
+from progress.bar import Bar
+
 from atomistic import ATOM_JMOL_COLOURS
 from atomistic.utils import get_column_vector
 from atomistic.crystal import CrystalStructure
-from atomistic.voronoi import VoronoiTessellation
+from atomistic.voronoi import VoronoiTessellation, in_hull
 
 
 def get_vec_squared_distances(vecs):
@@ -48,6 +50,48 @@ def get_vec_distances(vecs):
     """
 
     return np.sqrt(get_vec_squared_distances(vecs))
+
+
+def get_volumetric_data_grid(grid_size, supercell, grid_values=None, periodic=False):
+    """Get uniform grid indices.
+
+    Returns
+    -------
+    ndarray of shape (3, N)        
+
+    """
+    if grid_values is not None:
+        if grid_values.shape[0] != np.prod(grid_size):
+            msg = ('The outer shape of `grid_values` should be equal to the product of '
+                   'the `grid_size`.')
+            raise ValueError(msg)
+
+    # Get cartesian coordinates of grid:
+    A, B, C = np.meshgrid(*[np.arange(i) for i in grid_size])
+    Af = A / grid_size[0]
+    Bf = B / grid_size[1]
+    Cf = C / grid_size[2]
+    grid_frac = np.vstack([Af.flatten(), Bf.flatten(), Cf.flatten()])
+    grid = supercell @ grid_frac
+
+    if not periodic:
+        if grid_values is not None:
+            return (grid, grid_values)
+        else:
+            return grid
+
+    else:
+
+        x, y, z = np.meshgrid(*[[-1, 0, 1]] * 3)
+        sup_trans = np.vstack([x.flatten(), y.flatten(), z.flatten()])
+        translation = np.dot(supercell, sup_trans)
+        grid_periodic = np.concatenate(translation.T[:, :, None] + grid, axis=1)
+
+        if grid_values is not None:
+            grid_values_periodic = np.tile(grid_values, (27,))
+            return (grid_periodic, grid_values_periodic)
+        else:
+            return grid_periodic
 
 
 class AtomisticStructureException(Exception):
@@ -89,6 +133,8 @@ class AtomisticStructure(object):
 
         self.tessellation = None            # Set in `set_voronoi_tessellation`
         self.atom_site_geometries = None    # Set in `set_atom_site_geometries`
+        self.volumetric_data = {}           # Updated in `add_volumetric_data`
+        self.binned_volumetric_data = {}    # Updated in `bin_volumetric_data` with method "grid"
 
     # @property
     # def supercell(self):
@@ -199,6 +245,25 @@ class AtomisticStructure(object):
             lines.update(self.tessellation.get_geometry_group_lines(
                 include_atoms, show_vertices, show_ridges))
 
+        if self.volumetric_data:
+            for name, dat in self.volumetric_data.items():
+                # Get cartesian coordinates of grid:
+                grid = get_volumetric_data_grid(dat['grid_size'], self.supercell)
+
+                # Sub sample; max 1000 points:
+                step = int(grid.shape[1] / 1000) or 1
+                grid = grid[:, ::step]
+                grid_sites = Sites(grid)
+                points.update({name: grid_sites})
+
+                # Add periodic grid too:
+                grid_per = get_volumetric_data_grid(
+                    dat['grid_size'], self.supercell, periodic=True)
+                step_per = int(grid_per.shape[1] / 1000) or 1
+                grid_per = grid_per[:, ::step_per]
+                grid_per_sites = Sites(grid_per)
+                points.update({name + '_periodic': grid_per_sites})
+
         gg = GeometryGroup(points=points, boxes=boxes, lines=lines)
 
         return gg
@@ -234,19 +299,39 @@ class AtomisticStructure(object):
 
         if 'style_points' not in visual_args:
 
-            style_points = {
-                'lattice_sites': {
-                    'marker_symbol': 'cross',
-                    'marker_size': 5,
-                    'fill_colour': 'gray',
+            visual_args.update({
+                'style_points': {
+                    'lattice_sites': {
+                        'marker_symbol': 'cross',
+                        'marker_size': 5,
+                        'fill_colour': 'gray',
+                    },
+                    'interstices': {
+                        'marker_symbol': 'square-open',
+                        'marker_size': 4,
+                        'fill_colour': 'pink',
+                    },
                 },
-                'interstices': {
-                    'marker_symbol': 'square-open',
-                    'marker_size': 4,
-                    'fill_colour': 'pink',
-                }
-            }
-            visual_args.update({'style_points': style_points})
+            })
+
+        if self.volumetric_data:
+            for k, v in self.volumetric_data.items():
+
+                # Sub sample; max 1000 points:
+                total_len = np.product(v['grid_size'])
+                step = int(total_len / 1000) or 1
+                dat = v['data'][::step]
+                visual_args['style_points'].update({
+                    k: {'fill_colour': dat, 'marker_size': 2, },
+                })
+
+                _, grid_per_dat = get_volumetric_data_grid(
+                    v['grid_size'], self.supercell, grid_values=v['data'], periodic=True)
+                step_per = int(grid_per_dat.shape[0] / 1000) or 1
+                dat_per = grid_per_dat[::step_per]
+                visual_args['style_points'].update({
+                    (k + '_periodic'): {'fill_colour': dat_per, 'marker_size': 2, },
+                })
 
         return visual_args
 
@@ -702,6 +787,221 @@ class AtomisticStructure(object):
             return False
 
         return True
+
+    def add_volumetric_data(self, name, grid_size, data):
+        """Add a uniform grid of volumetric data.
+
+        Parameters
+        ----------
+        name : str
+        grid_size : tuple of length three
+            The size of the grid, along the three supercell directions.
+        data : ndarray of outer shape `grid_size`
+            Data to assign to the grid points. The outer shape must be equal to
+            `grid_size`. The grid is assumed to occupy the whole supercell.
+
+        """
+
+        if name in self.volumetric_data:
+            raise ValueError(f'Volumetric data by the name "{name}" is already assigned.')
+
+        if list(data.shape[:len(grid_size)]) != list(grid_size):
+            raise ValueError(f'`data` must be an ndarray whose outer shape is equal to '
+                             f'`grid_size`.')
+
+        self.volumetric_data.update({
+            name: {
+                'grid_size': grid_size,
+                'data': data.flatten(),
+            }
+        })
+
+    def set_bond_regions(self, method='polyhedron'):
+
+        if not self.tessellation:
+            self.set_voronoi_tessellation()
+
+        self.tessellation.set_bond_regions(method=method)
+
+    def bin_volumetric_data(self, name, method, **kwargs):
+        """Bin scalar volumetric data over the supercell.
+
+        If method="bonds_polyhedron", this adds the bin values to the tessellation
+        object's `bond_regions` attribute; if method="atoms_voronoi", this adds a list to
+        the tessellation object's binned_volumetric_data attribute; if method="grid", this
+        adds a list to the AtomisticStructure.binned_volumetric_data attribute.
+
+        Parameters
+        ----------
+        name : str
+            Name of volumetric data to bin.
+        method : str
+            Method by which to define bins. If "bonds_polyhedron", use the bond regions
+            as defined with `set_bond_regions`, using `method=polyhedron`. If
+            "atoms_voronoi", use the Voronoi regions of the atoms. If "grid", define a
+            uniform grid over the supercell and bin into each grid cell.
+        kwargs : dict
+            grid_size : list of int
+                If `method` is "grid", specify the grid_size as an additional keyword
+                parameter here.
+
+        """
+
+        if not self.tessellation:
+            self.set_voronoi_tessellation()
+
+        # TODO: add another method: "grid" for binning over a uniform grid of a given resolution.
+
+        if name not in self.volumetric_data:
+            raise ValueError(f'No volumetric data named "{name}" exists.')
+
+        allowed_methods = ['bonds_polyhedron', 'atoms_voronoi', 'grid']
+        if method not in allowed_methods:
+            raise ValueError(f'`method` must be one of: {allowed_methods}.')
+
+        vol_grid_size = self.volumetric_data[name]['grid_size']
+        vol_grid_data = self.volumetric_data[name]['data']
+
+        # Get cartesian coordinates of grid:
+        grid_per, grid_vals_per = get_volumetric_data_grid(
+            vol_grid_size,
+            self.supercell,
+            grid_values=vol_grid_data,
+            periodic=True
+        )
+
+        if 'grid_idx_in_volume_count' not in self.volumetric_data[name]:
+            # No binning has previously been performed of this data:
+            self.volumetric_data[name].update({'grid_idx_in_volume_count': {}})
+
+        elif method in self.volumetric_data[name]['grid_idx_in_volume_count']:
+            if (
+                method != 'grid' or
+                method == 'grid' and (
+                    tuple(kwargs['grid_size']) in
+                    self.volumetric_data[name]['grid_idx_in_volume_count']['grid']
+                )
+            ):
+                # This binning has already been done:
+                msg = (f'Volumetric data "{name}" has already been binned over the '
+                       f'supercell using method "{method}" and kwargs: {kwargs}.')
+                raise ValueError(msg)
+
+        # Use this to check a sensible binning. grid_idx_in_volume_count counts how
+        # many times each grid point has been found to be within a bond region. Note
+        # that we might expect this to be an array of ones. However, since the grid is
+        # periodic (3x3x3 supercells) and the bond regions barely overlap the central
+        # supercell, there will be a large number of zeros in this array. Also, we
+        # would expect a relatively small number of twos in this array, where a given
+        # grid point exists at the boundary between two bond regions.
+        grid_idx_in_volume_count = np.zeros((grid_per.shape[1],), dtype=int)
+
+        # Get indices of volumetric data that is contained within each sub-volume:
+        if method == 'bonds_polyhedron':
+
+            if (
+                not self.tessellation.bond_regions or
+                'polyhedron' not in self.tessellation.bond_regions
+            ):
+                msg = 'Bond regions have not been defined using the method "polyhedron".'
+                raise ValueError(msg)
+
+            num_regs = len(self.tessellation.bond_regions['polyhedron'])
+            bar = Bar('Processing', max=num_regs)
+            bar.check_tty = False
+
+            for reg_idx, reg in enumerate(self.tessellation.bond_regions['polyhedron']):
+
+                grid_idx_in_volume_bool = in_hull(grid_per.T, reg['vertices'].T)
+                grid_idx_in_volume = np.where(grid_idx_in_volume_bool)[0]
+                bin_value = np.sum(grid_vals_per[grid_idx_in_volume_bool])
+
+                if 'binned_volumetric_data' not in reg:
+                    reg.update({'binned_volumetric_data': {}})
+
+                if name not in reg['binned_volumetric_data']:
+                    reg['binned_volumetric_data'].update({name: {}})
+
+                reg['binned_volumetric_data'][name].update({
+                    'bin_value': bin_value,
+                    'grid_idx_in_volume': grid_idx_in_volume,
+                })
+
+                grid_idx_in_volume_count += grid_idx_in_volume_bool
+                bar.next()
+
+            bar.finish()
+
+        elif method == 'atoms_voronoi':
+
+            region_verts = self.tessellation.point_vertices
+            num_atoms = len(region_verts)
+            bar = Bar('Processing', max=num_atoms)
+            bar.check_tty = False
+
+            if name not in self.tessellation.binned_volumetric_data:
+                self.tessellation.binned_volumetric_data.update({name: []})
+
+            for atom_idx, verts_idx in enumerate(region_verts):
+                verts = self.tessellation.vertices[verts_idx]
+                grid_idx_in_volume_bool = in_hull(grid_per.T, verts)
+                grid_idx_in_volume = np.where(grid_idx_in_volume_bool)[0]
+                bin_value = np.sum(grid_vals_per[grid_idx_in_volume_bool])
+
+                self.tessellation.binned_volumetric_data[name].append({
+                    'bin_value': bin_value,
+                    'grid_idx_in_volume': grid_idx_in_volume,
+                })
+
+                grid_idx_in_volume_count += grid_idx_in_volume_bool
+                bar.next()
+
+            bar.finish()
+
+        elif method == 'grid':
+
+            grid_cell_dims = self.supercell / kwargs['grid_size']
+            grid_cell_origins = get_volumetric_data_grid(
+                grid_size=kwargs['grid_size'],
+                supercell=self.supercell,
+            )
+            bar = Bar('Processing', max=grid_cell_origins.shape[1])
+            bar.check_tty = False
+
+            if name not in self.binned_volumetric_data:
+                self.binned_volumetric_data.update({name: {}})
+
+            grid_size_tuple = tuple(kwargs['grid_size'])
+            if grid_size_tuple not in self.binned_volumetric_data[name]:
+                self.binned_volumetric_data[name].update({grid_size_tuple: []})
+
+            for origin in grid_cell_origins.T:
+                verts = geometry.get_box_corners(grid_cell_dims, origin[:, None])[0]
+                centre = np.mean(verts, axis=1)
+
+                grid_idx_in_volume_bool = in_hull(grid_per.T, verts.T)
+                grid_idx_in_volume = np.where(grid_idx_in_volume_bool)[0]
+                bin_value = np.sum(grid_vals_per[grid_idx_in_volume_bool])
+
+                self.binned_volumetric_data[name][grid_size_tuple].append({
+                    'grid_cell_origin': origin,
+                    'grid_cell_centre': centre,
+                    'bin_value': bin_value,
+                    'grid_idx_in_volume': grid_idx_in_volume,
+                })
+
+                grid_idx_in_volume_count += grid_idx_in_volume_bool
+                bar.next()
+
+            grid_idx_in_volume_count = {
+                **self.volumetric_data[name]['grid_idx_in_volume_count'].get('grid', {}),
+                grid_size_tuple: grid_idx_in_volume_count,
+            }
+            bar.finish()
+
+        self.volumetric_data[name]['grid_idx_in_volume_count'].update({
+            method: grid_idx_in_volume_count,
+        })
 
 
 class AtomisticSimulation(object):

@@ -158,3 +158,25 @@ def get_atom_species_jmol_colours(jmol_colours_path):
                 species: rgb
             })
     return cols
+
+
+def where_any_in(arr1, arr2, ret_idx=False):
+    """Find the indices where any elements of one array are in another.
+
+    Parameters
+    ----------
+    arr1 : ndarray of shape (N,)
+    arr2 : ndarray of shape (M,)
+
+    Returns
+    -------
+    match : ndarray of shape (P,) or ndarray of shape (M,)
+
+    """
+    arr1_2 = arr1[:, None]
+    match_idx = np.any(arr1_2 == np.tile(arr2, (arr1_2.shape[0], 1)), axis=0)
+    if ret_idx:
+        match = match_idx
+    else:
+        match = np.where(match_idx)[0]
+    return match
